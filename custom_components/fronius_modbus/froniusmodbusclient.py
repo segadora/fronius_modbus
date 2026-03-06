@@ -1,5 +1,3 @@
-#import os, sys; sys.path.append(os.path.dirname(os.path.realpath(__file__)))
-
 """BYD Battery Box Class"""
 
 import asyncio
@@ -29,6 +27,7 @@ from .froniusmodbusclient_const import (
     CHARGE_GRID_STATUS,
     STORAGE_EXT_CONTROL_MODE,
     FRONIUS_INVERTER_STATUS,
+    INVERTER_STATUS,
     CONNECTION_STATUS_CONDENSED,
     ECP_CONNECTION_STATUS,
     INVERTER_CONTROLS,
@@ -36,8 +35,6 @@ from .froniusmodbusclient_const import (
     CONTROL_STATUS,
     EXPORT_LIMIT_STATUS,
     GRID_STATUS,
-#    INVERTER_STATUS,
-#    CONNECTION_STATUS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -86,7 +83,7 @@ class FroniusModbusClient(ExtModbusClient):
         return self._storage_address + offset
 
     def _get_export_limit_rate_sf(self) -> Optional[int]:
-        value = self.data.get("export_limit_rate_sf")
+        value = self.data.get("ac_limit_rate_sf")
         if not self.is_numeric(value):
             return None
         rate_sf = int(value)
@@ -281,8 +278,6 @@ class FroniusModbusClient(ExtModbusClient):
         if len(self._meter_unit_ids)>5:
             _LOGGER.error(f"Too many meters configured, max 5")
             return
-        #elif len(self._meter_unit_ids)>0:
-        #    self.meter_configured = True
 
         for i in range(len(self._meter_unit_ids)):
             unit_id = self._meter_unit_ids[i]
@@ -314,7 +309,7 @@ class FroniusModbusClient(ExtModbusClient):
         url = f"http://{self._host}/solar_api/v1/GetStorageRealtimeData.cgi"
 
         try:
-            response = requests.get(url)
+            response = requests.get(url, timeout=5)
 
             if response.status_code == 200:
                 data = response.json()
@@ -392,9 +387,8 @@ class FroniusModbusClient(ExtModbusClient):
 
         TmpCab = self._client.convert_from_registers(regs[31:32], data_type = self._client.DATATYPE.INT16)
         Tmp_SF = self._client.convert_from_registers(regs[35:36], data_type = self._client.DATATYPE.INT16)
-        #St = self._client.convert_from_registers(regs[36:37], data_type = self._client.DATATYPE.UINT16)
+        St = self._client.convert_from_registers(regs[36:37], data_type = self._client.DATATYPE.UINT16)
         StVnd = self._client.convert_from_registers(regs[37:38], data_type = self._client.DATATYPE.UINT16)
-        #EvtVnd1 = self._client.convert_from_registers(regs[42:44], data_type = self._client.DATATYPE.UINT32)
         EvtVnd2 = self._client.convert_from_registers(regs[44:46], data_type = self._client.DATATYPE.UINT32)
 
         self.data['A'] = self.calculate_value(A, A_SF, 3, 0, 1000)
@@ -411,10 +405,9 @@ class FroniusModbusClient(ExtModbusClient):
         self.data["acpower"] = self.calculate_value(W, W_SF, 2, -50000, 50000)
         self.data["line_frequency"] = self.calculate_value(Hz, Hz_SF, 2, 0, 100)
         self.data["acenergy"] = self.calculate_value(WH, WH_SF) 
-        #self.data["status"] = INVERTER_STATUS[St]
+        self.data["status"] = self._map_value(INVERTER_STATUS, St, "inverter status")
         self.data["statusvendor"] = self._map_value(FRONIUS_INVERTER_STATUS, StVnd, "inverter status")
         self.data["statusvendor_id"] = StVnd
-        #self.data["events1"] = self.bitmask_to_string(EvtVnd1,INVERTER_EVENTS,default='None',bits=32)  
         self.data["events2"] = self.bitmask_to_string(EvtVnd2,INVERTER_EVENTS,default='None',bits=32)  
 
         return True
@@ -485,16 +478,16 @@ class FroniusModbusClient(ExtModbusClient):
             return False
 
         WMax = self._client.convert_from_registers(regs[0:1], data_type = self._client.DATATYPE.UINT16)
-        #VRef = self._client.convert_from_registers(regs[1:2], data_type = self._client.DATATYPE.UINT16)
-        #VRefOfs = self._client.convert_from_registers(regs[2:3], data_type = self._client.DATATYPE.UINT16)
+        VRef = self._client.convert_from_registers(regs[1:2], data_type = self._client.DATATYPE.UINT16)
+        VRefOfs = self._client.convert_from_registers(regs[2:3], data_type = self._client.DATATYPE.UINT16)
 
         WMax_SF = self._client.convert_from_registers(regs[20:21], data_type = self._client.DATATYPE.INT16)
-        #VRef_SF = self._client.convert_from_registers(regs[21:22], data_type = self._client.DATATYPE.INT16)
-        #VRefOfs_SF = self._client.convert_from_registers(regs[21:22], data_type = self._client.DATATYPE.INT16)
+        VRef_SF = self._client.convert_from_registers(regs[21:22], data_type = self._client.DATATYPE.INT16)
+        VRefOfs_SF = VRef_SF
 
         self.data['max_power'] = self.calculate_value(WMax, WMax_SF,2,0,50000) 
-        #self.data['vref'] = self.calculate_value(VRef, VRef_SF) # At PCC 
-        #self.data['vrefofs'] = self.calculate_value(VRefOfs, VRefOfs_SF) # At PCC 
+        self.data['vref'] = self.calculate_value(VRef, VRef_SF)
+        self.data['vrefofs'] = self.calculate_value(VRefOfs, VRefOfs_SF)
 
         return True
 
@@ -513,7 +506,7 @@ class FroniusModbusClient(ExtModbusClient):
         self.data['WMaxLim_Ena'] = self._map_value(CONTROL_STATUS, WMaxLim_Ena, 'throttle control')
         self.data['OutPFSet_Ena'] = self._map_value(CONTROL_STATUS, OutPFSet_Ena, 'fixed power factor')
         self.data['VArPct_Ena'] = self._map_value(CONTROL_STATUS, VArPct_Ena, 'VAr control')
-        self.data['export_limit_rate_sf'] = WMaxLimPct_SF
+        self.data['ac_limit_rate_sf'] = WMaxLimPct_SF
 
         return True
 
@@ -756,17 +749,14 @@ class FroniusModbusClient(ExtModbusClient):
         charge_power = self._client.convert_from_registers(regs[11:12], data_type = self._client.DATATYPE.INT16)
         # InOutWRte_WinTms: not supported
         # InOutWRte_RvrtTms: Timeout period for charge/discharge rate.
-        #InOutWRte_RvrtTms = self._client.convert_from_registers(regs[13:14], data_type = self._client.DATATYPE.INT16)
         # InOutWRte_RmpTms: not supported
         # ChaGriSet
         charge_grid_set = self._client.convert_from_registers(regs[15:16], data_type = self._client.DATATYPE.UINT16)
         # WChaMax_SF: Scale factor for maximum charge. 0
-        #max_charge_sf = self._client.convert_from_registers(regs[16:17], data_type = self._client.DATATYPE.INT16)
         # WChaDisChaGra_SF: Scale factor for maximum charge and discharge rate. 0
         # VAChaMax_SF: not supported
         # MinRsvPct_SF: Scale factor for minimum reserve percentage. -2
         # ChaState_SF: Scale factor for available energy percent. -2
-        #charge_state_sf = self._client.convert_from_registers(regs[20:21], data_type = self._client.DATATYPE.INT16)
         # StorAval_SF: not supported
         # InBatV_SF: not supported
         # InOutWRte_SF: Scale factor for percent charge/discharge rate. -2
@@ -775,7 +765,6 @@ class FroniusModbusClient(ExtModbusClient):
             self.storage_configured = True
 
         self.data['grid_charging'] = self._map_value(CHARGE_GRID_STATUS, charge_grid_set, 'grid charging')
-        #self.data['power'] = power
         self.data['charge_status'] = self._map_value(CHARGE_STATUS, charge_status, 'charge status')
         self.data['minimum_reserve'] =  self.calculate_value(minimum_reserve, -2, 2, 0, 100)
         self.data['discharging_power'] = self.calculate_value(discharge_power, -2, 2, -100, 100)
@@ -825,18 +814,6 @@ class FroniusModbusClient(ExtModbusClient):
             if not ext_control_mode is None:
                 self.data['ext_control_mode'] = self._map_value(STORAGE_EXT_CONTROL_MODE, ext_control_mode, 'extended storage mode')
                 self.storage_extended_control_mode = ext_control_mode
-
-        if ext_control_mode == 7:
-            soc = self.data.get('soc')
-            if storage_control_mode == 2 and soc == 100:
-                _LOGGER.error(f'Calibration hit 100%, start discharge')
-                await self.change_settings(1, 0, 100, 0)
-            elif storage_control_mode == 3 and soc <= 5: 
-                _LOGGER.error(f'Calibration hit 5%, return to auto mode')
-                await self.set_auto_mode()
-                await self.set_minimum_reserve(30)
-                self.data['ext_control_mode'] = self._map_value(STORAGE_EXT_CONTROL_MODE, 0, 'extended storage mode')
-                self.storage_extended_control_mode = 0
 
         return True
 
@@ -898,9 +875,8 @@ class FroniusModbusClient(ExtModbusClient):
                 elif not self.is_numeric(inverter_acpower):
                     _LOGGER.error(f'inverter acpower not numeric {inverter_acpower}')
 
-            status_str = ""
+            status_str = None
             i_frequency = self.data["line_frequency"]
-            #_LOGGER.debug(f'grid status m: {m_frequency} i: {i_frequency}')
             if not i_frequency is None and self.is_numeric(i_frequency) and not m_frequency is None and self.is_numeric(m_frequency):
                 m_online = False
                 if m_frequency and m_frequency > self._grid_frequency_lower_bound and m_frequency < self._grid_frequency_upper_bound:
@@ -929,23 +905,23 @@ class FroniusModbusClient(ExtModbusClient):
         rate_regs = await self.get_registers(unit_id=self._inverter_unit_id, address=EXPORT_LIMIT_RATE_ADDRESS, count=1)
         if rate_regs is not None:
             export_limit_rate_raw = self._client.convert_from_registers(rate_regs[0:1], data_type=self._client.DATATYPE.UINT16)
-            self.data['export_limit_rate_raw'] = export_limit_rate_raw
-            self.data['export_limit_rate_pct'] = self._export_limit_raw_to_percent(export_limit_rate_raw)
-            self.data['export_limit_rate'] = self._export_limit_raw_to_watts(export_limit_rate_raw)
+            self.data['ac_limit_rate_raw'] = export_limit_rate_raw
+            self.data['ac_limit_rate_pct'] = self._export_limit_raw_to_percent(export_limit_rate_raw)
+            self.data['ac_limit_rate'] = self._export_limit_raw_to_watts(export_limit_rate_raw)
         else:
-            self.data['export_limit_rate_raw'] = None
-            self.data['export_limit_rate_pct'] = None
-            self.data['export_limit_rate'] = None
+            self.data['ac_limit_rate_raw'] = None
+            self.data['ac_limit_rate_pct'] = None
+            self.data['ac_limit_rate'] = None
 
         if time.monotonic() < self._export_limit_enable_mask_until:
-            self.data['export_limit_enable'] = EXPORT_LIMIT_STATUS.get(1, 'Enabled')
+            self.data['ac_limit_enable'] = EXPORT_LIMIT_STATUS.get(1, 'Enabled')
             return True
 
         export_limit_enable_raw = await self._read_export_limit_enable_raw()
         if export_limit_enable_raw is None:
-            self.data['export_limit_enable'] = None
+            self.data['ac_limit_enable'] = None
         else:
-            self.data['export_limit_enable'] = EXPORT_LIMIT_STATUS.get(export_limit_enable_raw, 'Unknown')
+            self.data['ac_limit_enable'] = EXPORT_LIMIT_STATUS.get(export_limit_enable_raw, 'Unknown')
             if export_limit_enable_raw == 1:
                 self._export_limit_enable_mask_until = 0.0
 
@@ -1036,46 +1012,46 @@ class FroniusModbusClient(ExtModbusClient):
             charge_rate = int(round(charge_rate * 100))
         await self.write_registers(unit_id=self._inverter_unit_id, address=self._storage_register_address(11), payload=[charge_rate])
 
-    async def change_settings(self, mode, charge_limit, discharge_limit, grid_charge_power=0, grid_discharge_power=0, minimum_reserve=None):
+    async def change_settings(
+        self,
+        mode,
+        charge_limit,
+        discharge_limit,
+        grid_charge_power=0,
+        grid_discharge_power=0,
+        minimum_reserve=None,
+        extended_mode: Optional[int] = None,
+    ):
+        effective_mode = self.storage_extended_control_mode if extended_mode is None else extended_mode
         await self.set_storage_control_mode(mode)
         await self.set_charge_rate(charge_limit)
         await self.set_discharge_rate(discharge_limit)
-        self.data['charge_limit'] = charge_limit
-        if self.storage_extended_control_mode == 4:
-            self.data['discharge_limit'] = 0
-        else:
-            self.data['discharge_limit'] = discharge_limit
-        if self.storage_extended_control_mode == 5:
-            self.data['charge_limit'] = 0
-        else:
-            self.data['charge_limit'] = charge_limit
+        self.data['charge_limit'] = 0 if effective_mode == 5 else charge_limit
+        self.data['discharge_limit'] = 0 if effective_mode == 4 else discharge_limit
         self.data['grid_charge_power'] = grid_charge_power
         self.data['grid_discharge_power'] = grid_discharge_power
+        self.storage_extended_control_mode = effective_mode
         if not minimum_reserve is None:
             await self.set_minimum_reserve(minimum_reserve)
         
     async def restore_defaults(self):
-        await self.change_settings(mode=0, charge_limit=100, discharge_limit=100, minimum_reserve=7)
+        await self.change_settings(mode=0, charge_limit=100, discharge_limit=100, minimum_reserve=7, extended_mode=0)
         _LOGGER.info(f"restored defaults")
 
     async def set_auto_mode(self):
-        await self.change_settings(mode=0, charge_limit=100, discharge_limit=100)
-        self.storage_extended_control_mode = 0
+        await self.change_settings(mode=0, charge_limit=100, discharge_limit=100, extended_mode=0)
         _LOGGER.info(f"Auto mode")
 
     async def set_charge_mode(self):
-        await self.change_settings(mode=1, charge_limit=100, discharge_limit=100)
-        self.storage_extended_control_mode = 1
+        await self.change_settings(mode=1, charge_limit=100, discharge_limit=100, extended_mode=1)
         _LOGGER.info(f"Set charge mode")
   
     async def set_discharge_mode(self):
-        await self.change_settings(mode=2, charge_limit=100, discharge_limit=100)
-        self.storage_extended_control_mode = 2
+        await self.change_settings(mode=2, charge_limit=100, discharge_limit=100, extended_mode=2)
         _LOGGER.info(f"Set discharge mode")
 
     async def set_charge_discharge_mode(self):
-        await self.change_settings(mode=3, charge_limit=100, discharge_limit=100)
-        self.storage_extended_control_mode = 3
+        await self.change_settings(mode=3, charge_limit=100, discharge_limit=100, extended_mode=3)
         _LOGGER.info(f"Set charge/discharge mode.")
 
     async def set_grid_charge_mode(self):
@@ -1087,9 +1063,9 @@ class FroniusModbusClient(ExtModbusClient):
             charge_limit=100,      # allow charging up to 100%
             discharge_limit=0,     # no discharging in this mode
             grid_charge_power=grid_charge_power,
+            extended_mode=4,
         )
-        self.storage_extended_control_mode = 4
-        _LOGGER.info(f"Charge from grid enabled, target {grid_charge_power} W")
+        _LOGGER.info(f"Charge from grid enabled, target {grid_charge_power}%")
 
 
     async def set_grid_discharge_mode(self):
@@ -1101,31 +1077,23 @@ class FroniusModbusClient(ExtModbusClient):
             charge_limit=0,        # no charging in this mode
             discharge_limit=100,   # allow discharging up to 100%
             grid_discharge_power=grid_discharge_power,
+            extended_mode=5,
         )
-        self.storage_extended_control_mode = 5
         _LOGGER.info(
-            f"Discharge to grid enabled, target {grid_discharge_power} W"
+            f"Discharge to grid enabled, target {grid_discharge_power}%"
         )
 
     async def set_block_discharge_mode(self):
         charge_rate = 100
-        await self.change_settings(mode=3, charge_limit=charge_rate, discharge_limit=0)
-        self.storage_extended_control_mode = 6
+        await self.change_settings(mode=3, charge_limit=charge_rate, discharge_limit=0, extended_mode=6)
         _LOGGER.info(f"blocked discharging")
 
     async def set_block_charge_mode(self):
         discharge_rate = 100
-        await self.change_settings(mode=3, charge_limit=0, discharge_limit=discharge_rate)
-        self.storage_extended_control_mode = 7
+        await self.change_settings(mode=3, charge_limit=0, discharge_limit=discharge_rate, extended_mode=7)
         _LOGGER.info(f"Block charging at {discharge_rate}")
 
-    async def set_calibrate_mode(self):
-        await self.change_settings(mode=2, charge_limit=100, discharge_limit=-100, grid_charge_power=100)
-        self.storage_extended_control_mode = 8
-        _LOGGER.info(f"Auto mode")
-
-
-    async def set_export_limit_rate(self, rate):
+    async def set_ac_limit_rate(self, rate):
         """Set export limit rate in watts and write WMaxLimPct raw value."""
         raw_rate = self._export_limit_watts_to_raw(rate)
         if raw_rate is None:
@@ -1168,33 +1136,33 @@ class FroniusModbusClient(ExtModbusClient):
                 address=EXPORT_LIMIT_ENABLE_ADDRESS,
                 payload=[1],
             )
-            self.data['export_limit_enable'] = EXPORT_LIMIT_STATUS.get(1, 'Enabled')
+            self.data['ac_limit_enable'] = EXPORT_LIMIT_STATUS.get(1, 'Enabled')
             enable_after_raw = await self._read_export_limit_enable_raw()
             if enable_after_raw == 1:
                 self._export_limit_enable_mask_until = 0.0
         elif export_limit_enable_raw is not None:
             self._export_limit_enable_mask_until = 0.0
-            self.data['export_limit_enable'] = EXPORT_LIMIT_STATUS.get(export_limit_enable_raw, 'Unknown')
+            self.data['ac_limit_enable'] = EXPORT_LIMIT_STATUS.get(export_limit_enable_raw, 'Unknown')
         else:
             self._export_limit_enable_mask_until = 0.0
 
-        self.data['export_limit_rate_raw'] = raw_rate
-        self.data['export_limit_rate_pct'] = self._export_limit_raw_to_percent(raw_rate)
-        self.data['export_limit_rate'] = self._export_limit_raw_to_watts(raw_rate)
+        self.data['ac_limit_rate_raw'] = raw_rate
+        self.data['ac_limit_rate_pct'] = self._export_limit_raw_to_percent(raw_rate)
+        self.data['ac_limit_rate'] = self._export_limit_raw_to_watts(raw_rate)
         _LOGGER.info(
             "Set export limit rate to %s W (raw=%s, enable_before=%s, pulsed_enable=%s, applied=%s)",
-            self.data['export_limit_rate'],
+            self.data['ac_limit_rate'],
             raw_rate,
             export_limit_enable_raw,
             was_enabled,
             applied if was_enabled else None,
         )
 
-    async def set_export_limit_enable(self, enable):
+    async def set_ac_limit_enable(self, enable):
         """Enable/disable export limit (0=Disabled, 1=Enabled)"""
         enable_value = 1 if enable else 0
         await self.write_registers(unit_id=self._inverter_unit_id, address=EXPORT_LIMIT_ENABLE_ADDRESS, payload=[enable_value])
-        self.data['export_limit_enable'] = EXPORT_LIMIT_STATUS.get(enable_value, 'Unknown')
+        self.data['ac_limit_enable'] = EXPORT_LIMIT_STATUS.get(enable_value, 'Unknown')
         _LOGGER.info(f"Set export limit enable to {enable_value}")
 
     async def set_conn_status(self, enable):

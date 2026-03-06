@@ -6,7 +6,7 @@
                 "title": "Set up Fronius System",
                 "description": "Please provide connection details to Fronius System.",
                 "data": {
-                    "ip_address": "IP Address",
+                    "host": "Host",
                     "port": "Port",
                     "scan_interval": "Scan Interval in Seconds",
                     "inverter_modbus_unit_id": "Inverter Modbus Unit/Slave ID",
@@ -21,7 +21,7 @@
             "unsupported_hardware": "Unsupported hardware found. See error log for details.",
             "unknown": "An unknown error occurred",
             "scan_interval_too_short": "Scan interval is too short. Minimum 5 seconds.",
-            "modbus_address_conflict": "Modbus IDs are not unqiue"
+            "modbus_address_conflict": "Modbus IDs are not unique"
         }
     },
     "options": {
@@ -30,7 +30,7 @@
                 "title": "Set up Fronius System",
                 "description": "Set options for your Fronius System.",
                 "data": {
-                    "ip_address": "IP Address",
+                    "host": "Host",
                     "port": "Port",
                     "scan_interval": "Scan Interval in Seconds",
                     "inverter_modbus_unit_id": "Inverter Modbus Unit/Slave ID",
@@ -39,7 +39,7 @@
             }
         },
         "error": {
-            "scan_interval_too_short": "Scan interval is too short. Minimum 10 seconds."
+            "scan_interval_too_short": "Scan interval is too short. Minimum 5 seconds."
         }
     }
   }

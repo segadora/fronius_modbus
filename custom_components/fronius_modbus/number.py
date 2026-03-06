@@ -46,7 +46,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities) -> None:
             )
             entities.append(number)
 
-    # Add inverter number entities (export limit controls)
+    # Add inverter number entities.
     for number_info in INVERTER_NUMBER_TYPES:
         max_val = number_info[2]['max']
         max_key = number_info[2].get('max_key')
@@ -115,10 +115,9 @@ class FroniusModbusNumber(FroniusModbusBaseEntity, NumberEntity):
             await self._hub.set_grid_charge_power(value)
         elif self._key == 'grid_discharge_power':
             await self._hub.set_grid_discharge_power(value)
-        elif self._key == 'export_limit_rate':
-            await self._hub.set_export_limit_rate(value)
+        elif self._key == 'ac_limit_rate':
+            await self._hub.set_ac_limit_rate(value)
 
-        #_LOGGER.debug(f"Number {self._key} set to {value}")
         self.async_write_ha_state()
 
     @property
@@ -134,6 +133,6 @@ class FroniusModbusNumber(FroniusModbusBaseEntity, NumberEntity):
             return True
         if self._key == 'grid_discharge_power' and self._hub.storage_extended_control_mode in [5]:
             return True
-        if self._key == 'export_limit_rate':
+        if self._key == 'ac_limit_rate':
             return True
         return False

@@ -1,10 +1,7 @@
-#import os, sys; sys.path.append(os.path.dirname(os.path.realpath(__file__)))
-
 """Extended Modbus Class"""
 
 import logging
 import operator
-#from datetime import timedelta, datetime
 from typing import Literal
 import struct
 import asyncio
@@ -127,7 +124,6 @@ class ExtModbusClient:
     async def write_registers(self, unit_id, address, payload):
         """Write registers."""
         await self._check_and_reconnect()
-        #_LOGGER.debug(f"write registers a: {address} p: {payload} unit_id: {unit_id}")
 
         try:
             result = await self._client.write_registers(address=address, values=payload, device_id=unit_id)
@@ -140,8 +136,7 @@ class ExtModbusClient:
 
         if result.isError():
             raise Exception(f'write_registers: data error {self._client.connected} {type(result)} {result} ')
-    
-        #_LOGGER.debug(f'write result {type(result)} {result}')
+
         return result
 
     def strip_escapes(self, value:str):

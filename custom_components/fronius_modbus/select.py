@@ -35,7 +35,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities) -> None:
             )
             entities.append(select)
 
-    # Add inverter select entities (export limit enable)
+    # Add inverter select entities.
     for select_info in INVERTER_SELECT_TYPES:
         select = FroniusModbusSelect(
             coordinator=coordinator,
@@ -81,8 +81,8 @@ class FroniusModbusSelect(FroniusModbusBaseEntity, SelectEntity):
 
         if self._key == 'ext_control_mode':
             await self._hub.set_mode(new_mode)
-        elif self._key == 'export_limit_enable':
-            await self._hub.set_export_limit_enable(new_mode)
+        elif self._key == 'ac_limit_enable':
+            await self._hub.set_ac_limit_enable(new_mode)
         elif self._key == 'Conn':
             await self._hub.set_conn_status(new_mode)
 

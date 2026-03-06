@@ -134,12 +134,14 @@ To come!
 | Entity  | Description |
 | --- | --- |
 | Grid status | Grid status based on meter and interter frequency. If inverter frequency is 53hz it is running in off grid mode and normally in 50hz. When the inverter is sleeping the meter frequency is checked for connection. |
+| Status / Vendor status | Standard SunSpec inverter state plus the Fronius vendor-specific state code. |
+| Reference voltage / Reference voltage offset | SunSpec model 121 PCC voltage reference values exposed by the inverter. |
 
 ### Inverter Controls
 | Entity  | Description |
 | --- | --- |
-| Export Limit Enable | Allows limiting of inverter export to grid. Enable this setting first, and after set the export limit in setting below. |
-| Export Limit Rate | Sets export limit in watts. Internally this is mapped to SunSpec `WMaxLimPct` (% of `WMax`) using the inverter scale factor. |
+| AC Limit Enable | Allows limiting inverter AC output. Enable this setting first, and then set the AC limit below. |
+| AC Limit Rate | Sets the AC limit in watts. Internally this is mapped to SunSpec `WMaxLimPct` (% of `WMax`) using the inverter scale factor. |
 
 # Example Devices
 

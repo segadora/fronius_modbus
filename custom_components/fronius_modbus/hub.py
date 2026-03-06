@@ -70,9 +70,9 @@ class FroniusCoordinator(DataUpdateCoordinator):
 
             # Read meter data if configured
             if self.hub._client.meter_configured:
-                for meter_address in self.hub._client._meter_unit_ids:
+                for meter_idx, meter_address in enumerate(self.hub._client._meter_unit_ids, start=1):
                     await self.hub._client.read_meter_data(
-                        meter_prefix="m1_",
+                        meter_prefix=f"m{meter_idx}_",
                         unit_id=meter_address
                     )
 
@@ -115,7 +115,6 @@ class Hub:
     def toggle_busy(func):
         async def wrapper(self, *args, **kwargs):
             if self._busy:
-                #_LOGGER.debug(f"skip {func.__name__} hub busy") 
                 return
             self._busy = True
             error = None
@@ -193,7 +192,6 @@ class Hub:
             "model": self._client.data.get('i_model'),
             "serial_number": self._client.data.get('i_serial'),
             "sw_version": self._client.data.get('i_sw_version'),
-            #"hw_version": f'modbus id-{self._client.data.get('i_unit_id')}',
         }
     
     def get_device_info_meter(self, id) -> dict:
@@ -204,7 +202,6 @@ class Hub:
             "model": self._client.data.get(f'm{id}_model'),
             "serial_number": self._client.data.get(f'm{id}_serial'),
             "sw_version": self._client.data.get(f'm{id}_sw_version'),
-            #"hw_version": f'modbus id-{self._client.data.get(f'm{id}_unit_id')}',
         }
 
     @property
@@ -219,18 +216,8 @@ class Hub:
 
 
 
-    @toggle_busy
-    async def test_connection(self) -> bool:
-        """Test connectivity"""
-        try:
-            return await self._client.connect()
-        except Exception as e:
-            _LOGGER.exception("Error connecting to inverter", exc_info=True)
-            return False
-
     def close(self):
         """Disconnect client."""
-        #with self._lock:
         self._client.close()
 
     @property
@@ -275,8 +262,6 @@ class Hub:
             await self._client.set_block_discharge_mode()
         elif mode == 7:
             await self._client.set_block_charge_mode()
-        elif mode == 8:
-            await self._client.set_calibrate_mode()
 
     @toggle_busy
     async def set_minimum_reserve(self, value):
@@ -298,11 +283,11 @@ class Hub:
     async def set_grid_discharge_power(self, value):
         await self._client.set_grid_discharge_power(value)
 
-    async def set_export_limit_rate(self, value):
-        await self._client.set_export_limit_rate(value)
+    async def set_ac_limit_rate(self, value):
+        await self._client.set_ac_limit_rate(value)
 
-    async def set_export_limit_enable(self, value):
-        await self._client.set_export_limit_enable(value)
+    async def set_ac_limit_enable(self, value):
+        await self._client.set_ac_limit_enable(value)
 
     async def set_conn_status(self, enable):
         await self._client.set_conn_status(enable)

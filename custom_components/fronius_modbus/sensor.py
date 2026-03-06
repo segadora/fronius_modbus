@@ -7,7 +7,7 @@ from typing import Optional, Dict, Any
 from homeassistant.components.sensor import (
     SensorEntity,
 )
-from homeassistant.const import CONF_NAME #, CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
+from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.icon import icon_for_battery_level
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -90,20 +90,23 @@ async def async_setup_entry(
                 entities.append(sensor)
 
     if hub.meter_configured:
-        meter_id = '1'
-        for sensor_info in METER_SENSOR_TYPES.values():
-            sensor = FroniusModbusSensor(
-                coordinator=coordinator,
-                device_info=hub.get_device_info_meter(meter_id),
-                name=f'Meter {meter_id} ' + sensor_info[0],
-                key=f'm{meter_id}_' + sensor_info[1],
-                device_class=sensor_info[2],
-                state_class=sensor_info[3],
-                unit=sensor_info[4],
-                icon=sensor_info[5],
-                entity_category=sensor_info[6],
-            )
-            entities.append(sensor)
+        for meter_idx, _ in enumerate(hub._client._meter_unit_ids, start=1):
+            meter_id = str(meter_idx)
+            if f'm{meter_id}_unit_id' not in hub.data:
+                continue
+            for sensor_info in METER_SENSOR_TYPES.values():
+                sensor = FroniusModbusSensor(
+                    coordinator=coordinator,
+                    device_info=hub.get_device_info_meter(meter_id),
+                    name=f'Meter {meter_id} ' + sensor_info[0],
+                    key=f'm{meter_id}_' + sensor_info[1],
+                    device_class=sensor_info[2],
+                    state_class=sensor_info[3],
+                    unit=sensor_info[4],
+                    icon=sensor_info[5],
+                    entity_category=sensor_info[6],
+                )
+                entities.append(sensor)
 
     if hub.storage_configured:
         for sensor_info in INVERTER_STORAGE_SENSOR_TYPES.values():
@@ -154,5 +157,3 @@ class FroniusModbusSensor(FroniusModbusBaseEntity, SensorEntity):
     @property
     def extra_state_attributes(self):
         return None
-
-
