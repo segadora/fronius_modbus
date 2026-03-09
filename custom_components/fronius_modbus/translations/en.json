@@ -15,7 +15,24 @@
                     "api_password": "Web API Password",
                     "auto_enable_modbus": "Auto-enable Modbus via Web API"
                 }
+            },
+            "reconfigure": {
+                "title": "Review Fronius System",
+                "description": "Review and save the connection details for this migrated Fronius entry.",
+                "data": {
+                    "host": "Host",
+                    "port": "Port",
+                    "scan_interval": "Scan Interval in Seconds",
+                    "inverter_modbus_unit_id": "Inverter Modbus Unit/Slave ID",
+                    "meter_modbus_unit_id": "Meter Modbus Unit/Slave ID",
+                    "api_username": "Web API Username",
+                    "api_password": "Web API Password",
+                    "auto_enable_modbus": "Auto-enable Modbus via Web API"
+                }
             }
+        },
+        "abort": {
+            "reconfigure_successful": "Configuration updated successfully."
         },
         "error": {
             "cannot_connect": "Failed to connect",
@@ -27,6 +44,12 @@
             "modbus_address_conflict": "Modbus IDs are not unique",
             "incomplete_api_credentials": "Provide both the Web API username and password.",
             "invalid_api_credentials": "Web API login failed. Check the username and password."
+        }
+    },
+    "issues": {
+        "legacy_modbus_only_entry_reconfigure": {
+            "title": "Review migrated Fronius configuration",
+            "description": "The Fronius entry \"{entry_title}\" was created with an older Modbus-only version of this integration. It will keep working, but the configuration model has changed. Open the integration menu and select Reconfigure to review and save the current Modbus and optional Web API settings."
         }
     },
     "options": {

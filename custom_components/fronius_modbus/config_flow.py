@@ -23,11 +23,18 @@ from .const import (
     CONF_API_USERNAME,
     CONF_API_PASSWORD,
     CONF_AUTO_ENABLE_MODBUS,
+    CONF_RECONFIGURE_REQUIRED,
     SUPPORTED_MANUFACTURERS,
     SUPPORTED_MODELS,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _entry_payload(data: dict[str, Any], *, reconfigure_required: bool) -> dict[str, Any]:
+    payload = dict(data)
+    payload[CONF_RECONFIGURE_REQUIRED] = reconfigure_required
+    return payload
 
 def _build_schema(defaults: dict[str, Any]) -> vol.Schema:
     return vol.Schema(
@@ -141,6 +148,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow """
 
     VERSION = 1
+    MINOR_VERSION = 2
     CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_POLL
 
     @staticmethod
@@ -155,7 +163,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 info = await validate_input(self.hass, user_input)
 
-                return self.async_create_entry(title=info["title"], data=user_input)
+                return self.async_create_entry(
+                    title=info["title"],
+                    data=_entry_payload(user_input, reconfigure_required=False),
+                )
             except CannotConnect:
                 errors["base"] = "cannot_connect"
             except InvalidPort:
@@ -182,6 +193,50 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_reconfigure(self, user_input=None):
+        """Handle reconfiguration of an existing entry."""
+        errors = {}
+        entry = self._get_reconfigure_entry()
+        defaults = {**entry.data, **entry.options}
+
+        if user_input is not None:
+            try:
+                await validate_input(self.hass, user_input)
+                updated_payload = _entry_payload(user_input, reconfigure_required=False)
+                self.hass.config_entries.async_update_entry(
+                    entry,
+                    data={**entry.data, **updated_payload},
+                    options={**entry.options, **updated_payload},
+                    title=user_input[CONF_NAME],
+                )
+                await self.hass.config_entries.async_reload(entry.entry_id)
+                return self.async_abort(reason="reconfigure_successful")
+            except CannotConnect:
+                errors["base"] = "cannot_connect"
+            except InvalidPort:
+                errors["base"] = "invalid_port"
+            except InvalidHost:
+                errors["host"] = "invalid_host"
+            except ScanIntervalTooShort:
+                errors["base"] = "scan_interval_too_short"
+            except IncompleteApiCredentials:
+                errors["base"] = "incomplete_api_credentials"
+            except InvalidApiCredentials:
+                errors["base"] = "invalid_api_credentials"
+            except UnsupportedHardware:
+                errors["base"] = "unsupported_hardware"
+            except AddressesNotUnique:
+                errors["base"] = "modbus_address_conflict"
+            except Exception:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected exception")
+                errors["base"] = "unknown"
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=_build_schema(defaults),
+            errors=errors,
+        )
+
 
 class FroniusModbusOptionsFlow(config_entries.OptionsFlow):
     """Handle Fronius Modbus options."""
@@ -196,7 +251,10 @@ class FroniusModbusOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             try:
                 await validate_input(self.hass, user_input)
-                return self.async_create_entry(title="", data=user_input)
+                return self.async_create_entry(
+                    title="",
+                    data=_entry_payload(user_input, reconfigure_required=False),
+                )
             except CannotConnect:
                 errors["base"] = "cannot_connect"
             except InvalidPort:

@@ -8,6 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.const import Platform
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import issue_registry as ir
 
 from homeassistant.const import CONF_NAME, CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
 from .const import (
@@ -17,6 +18,7 @@ from .const import (
     CONF_API_USERNAME,
     CONF_API_PASSWORD,
     CONF_AUTO_ENABLE_MODBUS,
+    CONF_RECONFIGURE_REQUIRED,
     DEFAULT_AUTO_ENABLE_MODBUS,
 )
 
@@ -52,6 +54,8 @@ LEGACY_RENAMED_ENTITY_KEYS = (
     "export_limit_enable",
 )
 
+MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX = "legacy_modbus_only_reconfigure_"
+
 def _is_legacy_mppt_unique_id(unique_id: str) -> bool:
     return any(unique_id.endswith(f"_{key}") for key in LEGACY_MPPT_ENTITY_KEYS)
 
@@ -74,6 +78,77 @@ async def _async_remove_legacy_entities(hass: HomeAssistant, entry: ConfigEntry)
 
 def _entry_value(entry: ConfigEntry, key: str, default=None):
     return entry.options.get(key, entry.data.get(key, default))
+
+
+def _migration_issue_id(entry: ConfigEntry) -> str:
+    return f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}"
+
+
+def _entry_has_key(entry: ConfigEntry, key: str) -> bool:
+    return key in entry.options or key in entry.data
+
+
+def _entry_needs_reconfigure(entry: ConfigEntry) -> bool:
+    return bool(_entry_value(entry, CONF_RECONFIGURE_REQUIRED, False))
+
+
+def _legacy_modbus_only_entry(entry: ConfigEntry) -> bool:
+    return any(
+        not _entry_has_key(entry, key)
+        for key in (CONF_API_USERNAME, CONF_API_PASSWORD, CONF_AUTO_ENABLE_MODBUS)
+    )
+
+
+def _sync_reconfigure_issue(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    issue_id = _migration_issue_id(entry)
+    if _entry_needs_reconfigure(entry):
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=False,
+            is_persistent=True,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="legacy_modbus_only_entry_reconfigure",
+            translation_placeholders={
+                "entry_title": entry.title or _entry_value(entry, CONF_NAME, "Fronius"),
+            },
+        )
+        return
+
+    ir.async_delete_issue(hass, DOMAIN, issue_id)
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate old config entries."""
+    _LOGGER.debug(
+        "Migrating config entry %s version=%s minor=%s",
+        entry.entry_id,
+        entry.version,
+        entry.minor_version,
+    )
+
+    if entry.version > 1:
+        _LOGGER.error("Unsupported config entry version: %s", entry.version)
+        return False
+
+    if entry.version == 1 and entry.minor_version < 2:
+        new_data = {**entry.data}
+        new_data.setdefault(CONF_API_USERNAME, "")
+        new_data.setdefault(CONF_API_PASSWORD, "")
+        new_data.setdefault(CONF_AUTO_ENABLE_MODBUS, DEFAULT_AUTO_ENABLE_MODBUS)
+        if CONF_RECONFIGURE_REQUIRED not in new_data and CONF_RECONFIGURE_REQUIRED not in entry.options:
+            new_data[CONF_RECONFIGURE_REQUIRED] = _legacy_modbus_only_entry(entry)
+
+        hass.config_entries.async_update_entry(
+            entry,
+            data=new_data,
+            version=1,
+            minor_version=2,
+        )
+
+    _sync_reconfigure_issue(hass, entry)
+    return True
 
 
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -105,6 +180,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubConfigEntry) -> bool:
     _LOGGER.debug("Setup %s.%s", DOMAIN, name)
 
     await _async_remove_legacy_entities(hass, entry)
+    _sync_reconfigure_issue(hass, entry)
 
     entry.runtime_data = hub.Hub(
         hass=hass,
