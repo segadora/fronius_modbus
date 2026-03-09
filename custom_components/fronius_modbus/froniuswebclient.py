@@ -6,6 +6,8 @@ from typing import Any
 import requests
 from requests.auth import HTTPDigestAuth
 
+from .const import FIXED_API_USERNAME
+
 _LOGGER = logging.getLogger(__name__)
 
 MASTER_RTUIF = {"master": {"rtuif": [{"if": "rtu0"}, {"if": "rtu1"}]}}
@@ -38,9 +40,9 @@ class FroniusWebClient:
 
     def __init__(self, host: str, username: str, password: str, timeout: float = 4.0) -> None:
         self._host = host
-        self._username = username
+        self._username = FIXED_API_USERNAME
         self._timeout = timeout
-        self._auth = XHeaderDigestAuth(username, password)
+        self._auth = XHeaderDigestAuth(self._username, password)
 
     def _url(self, path: str) -> str:
         return f"http://{self._host}{path}"

@@ -4,30 +4,18 @@
         "step": {
             "user": {
                 "title": "Set up Fronius System",
-                "description": "Please provide connection details to Fronius System.",
+                "description": "Please provide the Fronius host and required Web API password. The Web API username is fixed to customer.",
                 "data": {
                     "host": "Host",
-                    "port": "Port",
-                    "scan_interval": "Scan Interval in Seconds",
-                    "inverter_modbus_unit_id": "Inverter Modbus Unit/Slave ID",
-                    "meter_modbus_unit_id": "Meter Modbus Unit/Slave ID",
-                    "api_username": "Web API Username",
-                    "api_password": "Web API Password",
-                    "auto_enable_modbus": "Auto-enable Modbus via Web API"
+                    "api_password": "Web API Password"
                 }
             },
             "reconfigure": {
                 "title": "Review Fronius System",
-                "description": "Review and save the connection details for this migrated Fronius entry.",
+                "description": "Review and save the Fronius host and required Web API password for this migrated entry. The Web API username is fixed to customer.",
                 "data": {
                     "host": "Host",
-                    "port": "Port",
-                    "scan_interval": "Scan Interval in Seconds",
-                    "inverter_modbus_unit_id": "Inverter Modbus Unit/Slave ID",
-                    "meter_modbus_unit_id": "Meter Modbus Unit/Slave ID",
-                    "api_username": "Web API Username",
-                    "api_password": "Web API Password",
-                    "auto_enable_modbus": "Auto-enable Modbus via Web API"
+                    "api_password": "Web API Password"
                 }
             }
         },
@@ -42,30 +30,24 @@
             "unknown": "An unknown error occurred",
             "scan_interval_too_short": "Scan interval is too short. Minimum 5 seconds.",
             "modbus_address_conflict": "Modbus IDs are not unique",
-            "incomplete_api_credentials": "Provide both the Web API username and password.",
+            "missing_api_password": "Web API password is required.",
             "invalid_api_credentials": "Web API login failed. Check the username and password."
         }
     },
     "issues": {
         "legacy_modbus_only_entry_reconfigure": {
             "title": "Review migrated Fronius configuration",
-            "description": "The Fronius entry \"{entry_title}\" was created with an older Modbus-only version of this integration. It will keep working, but the configuration model has changed. Open the integration menu and select Reconfigure to review and save the current Modbus and optional Web API settings."
+            "description": "The Fronius entry \"{entry_title}\" was created with an older version of this integration or is missing the required Web API password. It will keep working temporarily, but the configuration model has changed. Open the integration menu and select Reconfigure to review and save the current host and required Web API password."
         }
     },
     "options": {
         "step": {
             "init": {
                 "title": "Set up Fronius System",
-                "description": "Set options for your Fronius System.",
+                "description": "Set the Fronius host and required Web API password. The Web API username is fixed to customer.",
                 "data": {
                     "host": "Host",
-                    "port": "Port",
-                    "scan_interval": "Scan Interval in Seconds",
-                    "inverter_modbus_unit_id": "Inverter Modbus Unit/Slave ID",
-                    "meter_modbus_unit_id": "Meter Modbus Unit/Slave ID",
-                    "api_username": "Web API Username",
-                    "api_password": "Web API Password",
-                    "auto_enable_modbus": "Auto-enable Modbus via Web API"
+                    "api_password": "Web API Password"
                 }
             }
         },
@@ -77,7 +59,7 @@
             "unknown": "An unknown error occurred",
             "scan_interval_too_short": "Scan interval is too short. Minimum 5 seconds.",
             "modbus_address_conflict": "Modbus IDs are not unique",
-            "incomplete_api_credentials": "Provide both the Web API username and password.",
+            "missing_api_password": "Web API password is required.",
             "invalid_api_credentials": "Web API login failed. Check the username and password."
         }
     }

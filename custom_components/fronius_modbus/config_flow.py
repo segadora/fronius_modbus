@@ -24,11 +24,36 @@ from .const import (
     CONF_API_PASSWORD,
     CONF_AUTO_ENABLE_MODBUS,
     CONF_RECONFIGURE_REQUIRED,
+    FIXED_API_USERNAME,
     SUPPORTED_MANUFACTURERS,
     SUPPORTED_MODELS,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _default_payload() -> dict[str, Any]:
+    return {
+        CONF_NAME: DEFAULT_NAME,
+        CONF_HOST: "",
+        CONF_PORT: DEFAULT_PORT,
+        CONF_INVERTER_UNIT_ID: DEFAULT_INVERTER_UNIT_ID,
+        CONF_METER_UNIT_ID: DEFAULT_METER_UNIT_ID,
+        CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
+        CONF_API_USERNAME: FIXED_API_USERNAME,
+        CONF_API_PASSWORD: "",
+        CONF_AUTO_ENABLE_MODBUS: DEFAULT_AUTO_ENABLE_MODBUS,
+    }
+
+
+def _expand_user_input(user_input: dict[str, Any], defaults: dict[str, Any] | None = None) -> dict[str, Any]:
+    payload = _default_payload()
+    if defaults:
+        payload.update(defaults)
+    payload[CONF_HOST] = str(user_input.get(CONF_HOST, payload[CONF_HOST])).strip()
+    payload[CONF_API_PASSWORD] = str(user_input.get(CONF_API_PASSWORD, payload[CONF_API_PASSWORD]))
+    payload[CONF_API_USERNAME] = FIXED_API_USERNAME
+    return payload
 
 
 def _entry_payload(data: dict[str, Any], *, reconfigure_required: bool) -> dict[str, Any]:
@@ -39,33 +64,11 @@ def _entry_payload(data: dict[str, Any], *, reconfigure_required: bool) -> dict[
 def _build_schema(defaults: dict[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
-            vol.Optional(CONF_NAME, default=defaults.get(CONF_NAME, DEFAULT_NAME)): str,
             vol.Required(CONF_HOST, default=defaults.get(CONF_HOST, "")): str,
-            vol.Required(CONF_PORT, default=defaults.get(CONF_PORT, DEFAULT_PORT)): int,
-            vol.Optional(
-                CONF_INVERTER_UNIT_ID,
-                default=defaults.get(CONF_INVERTER_UNIT_ID, DEFAULT_INVERTER_UNIT_ID),
-            ): int,
-            vol.Optional(
-                CONF_METER_UNIT_ID,
-                default=defaults.get(CONF_METER_UNIT_ID, DEFAULT_METER_UNIT_ID),
-            ): int,
-            vol.Optional(
-                CONF_SCAN_INTERVAL,
-                default=defaults.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
-            ): int,
-            vol.Optional(
-                CONF_API_USERNAME,
-                default=defaults.get(CONF_API_USERNAME, ""),
-            ): str,
-            vol.Optional(
+            vol.Required(
                 CONF_API_PASSWORD,
                 default=defaults.get(CONF_API_PASSWORD, ""),
             ): str,
-            vol.Optional(
-                CONF_AUTO_ENABLE_MODBUS,
-                default=defaults.get(CONF_AUTO_ENABLE_MODBUS, DEFAULT_AUTO_ENABLE_MODBUS),
-            ): bool,
         }
     )
 
@@ -86,10 +89,10 @@ async def validate_input(hass: HomeAssistant, data: dict) -> dict[str, Any]:
     else:
         meter_addresses = []
 
-    api_username = data.get(CONF_API_USERNAME, "").strip()
     api_password = data.get(CONF_API_PASSWORD, "")
-    if bool(api_username) != bool(api_password):
-        raise IncompleteApiCredentials
+    if api_password == "":
+        raise MissingApiPassword
+    api_username = FIXED_API_USERNAME
 
     all_addresses = meter_addresses + [data[CONF_INVERTER_UNIT_ID]]
 
@@ -159,13 +162,15 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
         errors = {}
+        defaults = _default_payload()
         if user_input is not None:
             try:
-                info = await validate_input(self.hass, user_input)
+                validated_input = _expand_user_input(user_input, defaults)
+                info = await validate_input(self.hass, validated_input)
 
                 return self.async_create_entry(
                     title=info["title"],
-                    data=_entry_payload(user_input, reconfigure_required=False),
+                    data=_entry_payload(validated_input, reconfigure_required=False),
                 )
             except CannotConnect:
                 errors["base"] = "cannot_connect"
@@ -175,8 +180,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["host"] = "invalid_host"
             except ScanIntervalTooShort:
                 errors["base"] = "scan_interval_too_short"
-            except IncompleteApiCredentials:
-                errors["base"] = "incomplete_api_credentials"
+            except MissingApiPassword:
+                errors["base"] = "missing_api_password"
             except InvalidApiCredentials:
                 errors["base"] = "invalid_api_credentials"
             except UnsupportedHardware:
@@ -189,7 +194,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=_build_schema({}),
+            data_schema=_build_schema(defaults),
             errors=errors,
         )
 
@@ -197,17 +202,18 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle reconfiguration of an existing entry."""
         errors = {}
         entry = self._get_reconfigure_entry()
-        defaults = {**entry.data, **entry.options}
+        defaults = _expand_user_input({}, {**entry.data, **entry.options})
 
         if user_input is not None:
             try:
-                await validate_input(self.hass, user_input)
-                updated_payload = _entry_payload(user_input, reconfigure_required=False)
+                validated_input = _expand_user_input(user_input, defaults)
+                await validate_input(self.hass, validated_input)
+                updated_payload = _entry_payload(validated_input, reconfigure_required=False)
                 self.hass.config_entries.async_update_entry(
                     entry,
                     data={**entry.data, **updated_payload},
                     options={**entry.options, **updated_payload},
-                    title=user_input[CONF_NAME],
+                    title=validated_input[CONF_NAME],
                 )
                 await self.hass.config_entries.async_reload(entry.entry_id)
                 return self.async_abort(reason="reconfigure_successful")
@@ -219,8 +225,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["host"] = "invalid_host"
             except ScanIntervalTooShort:
                 errors["base"] = "scan_interval_too_short"
-            except IncompleteApiCredentials:
-                errors["base"] = "incomplete_api_credentials"
+            except MissingApiPassword:
+                errors["base"] = "missing_api_password"
             except InvalidApiCredentials:
                 errors["base"] = "invalid_api_credentials"
             except UnsupportedHardware:
@@ -246,14 +252,15 @@ class FroniusModbusOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input=None):
         errors = {}
-        defaults = {**self.config_entry.data, **self.config_entry.options}
+        defaults = _expand_user_input({}, {**self.config_entry.data, **self.config_entry.options})
 
         if user_input is not None:
             try:
-                await validate_input(self.hass, user_input)
+                validated_input = _expand_user_input(user_input, defaults)
+                await validate_input(self.hass, validated_input)
                 return self.async_create_entry(
                     title="",
-                    data=_entry_payload(user_input, reconfigure_required=False),
+                    data=_entry_payload(validated_input, reconfigure_required=False),
                 )
             except CannotConnect:
                 errors["base"] = "cannot_connect"
@@ -263,8 +270,8 @@ class FroniusModbusOptionsFlow(config_entries.OptionsFlow):
                 errors["host"] = "invalid_host"
             except ScanIntervalTooShort:
                 errors["base"] = "scan_interval_too_short"
-            except IncompleteApiCredentials:
-                errors["base"] = "incomplete_api_credentials"
+            except MissingApiPassword:
+                errors["base"] = "missing_api_password"
             except InvalidApiCredentials:
                 errors["base"] = "invalid_api_credentials"
             except UnsupportedHardware:
@@ -299,8 +306,8 @@ class AddressesNotUnique(exceptions.HomeAssistantError):
 class ScanIntervalTooShort(exceptions.HomeAssistantError):
     """Error to indicate the scan interval is too short."""
 
-class IncompleteApiCredentials(exceptions.HomeAssistantError):
-    """Error to indicate that only part of the API credentials were provided."""
+class MissingApiPassword(exceptions.HomeAssistantError):
+    """Error to indicate the Web API password is required."""
 
 class InvalidApiCredentials(exceptions.HomeAssistantError):
     """Error to indicate Fronius web API credentials are invalid."""

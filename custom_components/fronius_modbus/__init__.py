@@ -20,6 +20,11 @@ from .const import (
     CONF_AUTO_ENABLE_MODBUS,
     CONF_RECONFIGURE_REQUIRED,
     DEFAULT_AUTO_ENABLE_MODBUS,
+    DEFAULT_NAME,
+    DEFAULT_PORT,
+    DEFAULT_SCAN_INTERVAL,
+    DEFAULT_INVERTER_UNIT_ID,
+    FIXED_API_USERNAME,
 )
 
 from . import hub
@@ -89,7 +94,9 @@ def _entry_has_key(entry: ConfigEntry, key: str) -> bool:
 
 
 def _entry_needs_reconfigure(entry: ConfigEntry) -> bool:
-    return bool(_entry_value(entry, CONF_RECONFIGURE_REQUIRED, False))
+    return bool(_entry_value(entry, CONF_RECONFIGURE_REQUIRED, False)) or not bool(
+        _entry_value(entry, CONF_API_PASSWORD, "")
+    )
 
 
 def _legacy_modbus_only_entry(entry: ConfigEntry) -> bool:
@@ -134,7 +141,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if entry.version == 1 and entry.minor_version < 2:
         new_data = {**entry.data}
-        new_data.setdefault(CONF_API_USERNAME, "")
+        new_data[CONF_API_USERNAME] = FIXED_API_USERNAME
         new_data.setdefault(CONF_API_PASSWORD, "")
         new_data.setdefault(CONF_AUTO_ENABLE_MODBUS, DEFAULT_AUTO_ENABLE_MODBUS)
         if CONF_RECONFIGURE_REQUIRED not in new_data and CONF_RECONFIGURE_REQUIRED not in entry.options:
@@ -158,13 +165,13 @@ async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 async def async_setup_entry(hass: HomeAssistant, entry: HubConfigEntry) -> bool:
     """Set up Fronius Modbus from a config entry."""
 
-    name = _entry_value(entry, CONF_NAME)
+    name = _entry_value(entry, CONF_NAME, DEFAULT_NAME)
     host = _entry_value(entry, CONF_HOST)
-    port = _entry_value(entry, CONF_PORT)
-    inverter_unit_id = _entry_value(entry, CONF_INVERTER_UNIT_ID, 1)
-    scan_interval = _entry_value(entry, CONF_SCAN_INTERVAL)
-    api_username = _entry_value(entry, CONF_API_USERNAME)
+    port = _entry_value(entry, CONF_PORT, DEFAULT_PORT)
+    inverter_unit_id = _entry_value(entry, CONF_INVERTER_UNIT_ID, DEFAULT_INVERTER_UNIT_ID)
+    scan_interval = _entry_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
     api_password = _entry_value(entry, CONF_API_PASSWORD)
+    api_username = FIXED_API_USERNAME if api_password else None
     auto_enable_modbus = _entry_value(
         entry,
         CONF_AUTO_ENABLE_MODBUS,

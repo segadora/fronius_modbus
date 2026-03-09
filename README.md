@@ -49,20 +49,20 @@ Where the inverter has an 'Insulation Warning' page, Insulation Measurement Mode
 
 ![modbus settings](images/resistance.png?raw=true "resistance")
 
-### Optional: Web API Assisted Setup
+### Web API Assisted Setup
 
-If you provide the inverter Web API username and password in the integration setup, the integration can:
+If you provide the inverter Web API password in the integration setup, the integration can:
 
 - auto-enable Modbus TCP during setup/reload
 - expose authenticated battery controls from `/api/config/batteries`
 - expose Modbus service diagnostics from `/api/config/modbus`
 
-The Web API credentials are optional. If they are omitted, the integration stays Modbus-only.
+The Web API username is fixed to `customer`. The password is required for configuration.
 
 ### Migrating Older Entries
 
-Entries created with older Modbus-only versions are migrated with safe defaults and keep working.
-After upgrade, Home Assistant will raise a Repairs item asking you to reconfigure the integration once so the current settings model is reviewed and saved explicitly.
+Entries created with older Modbus-only versions are migrated with safe defaults and keep working temporarily.
+After upgrade, Home Assistant will raise a Repairs item asking you to reconfigure the integration so the required Web API password is saved explicitly.
 
 ## Charging From Grid
 
