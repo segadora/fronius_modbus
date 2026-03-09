@@ -32,23 +32,6 @@ After reboot of Home-Assistant, this integration can be configured through the i
 
 ## Inverter Setup
 
-Make sure modbus is enabled on the inverter. You can check by going into the web interface of the inverter and go to:
-"Communication" -> "Modbus"
-
-And turn on:
-
-- "Con­trol sec­ond­ary in­ver­t­er via Mod­bus TCP"
-- "Allow control"
-- Make sure that under 'SunSpec Model Type' has 'int + SF' selected.
-
-![modbus settings](images/modbus_settings.png?raw=true "modbus")
-
-Where the inverter has an 'Insulation Warning' page, Insulation Measurement Mode must be set to 'Exact' (or Accurate) depending on the translation. If this is not set correctly, the integration will generate a lot of error messages and not function.
-
-"ValueError: Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit"
-
-![modbus settings](images/resistance.png?raw=true "resistance")
-
 ### Web API Assisted Setup
 
 If you provide the inverter Web API password in the integration setup, the integration can:
@@ -67,13 +50,7 @@ After upgrade, Home Assistant will raise a Repairs item asking you to reconfigur
 
 ## Charging From Grid
 
-For Charging from Grid to work you must have it enabled in the Inverter.
-Energy Management -> Battery Management -> SoC Settings
-Battery Charging from Other Sources: Enabled
-From other generators in the home network and from Public Grid: Checked
-
-> [!IMPORTANT]
-> Turn off scheduled (dis)charging in the web UI to avoid unexpected behavior.
+Turn off scheduled (dis)charging in the web UI to avoid unexpected behavior.
 
 > [!IMPORTANT]
 > When using multiple integrations that use pymodbus package it can lead to version conflicts as they will share 1 package in HA. This can be fixed by removing ALL integrations using pymodbus and modbus configuratio.yaml (for the build in integration into HA), rebooting HA and then reinstalling the integrations and the modbus configuration yaml.
@@ -89,7 +66,8 @@ If Web API credentials are configured, the integration exposes both Modbus batte
 The only built-in cross-protocol synchronization is reserve:
 
 - writing `Minimum Reserve` also writes the API SoC minimum and forces API SOC mode to `manual`
-- all battery API writes send `BAT_M0_SOC_MODE: "manual"`
+- `Battery API Mode` writes `BAT_M0_SOC_MODE` to match the selected mode
+- entering Modbus `Charge from Grid` also enables the Web API `Charge from grid` and `Charge from AC` toggles when Web API is configured
 - `Target Feed In` is ignored by the inverter when battery charging is unavailable
 
 ### Controls
@@ -104,11 +82,13 @@ The only built-in cross-protocol synchronization is reserve:
 
 ### Battery API Controls
 
-| Entity           | Description                                                                                                               |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Battery API Mode | Fronius Web API battery mode: `Auto` or `Manual`.                                                                         |
+| Entity           | Description                                                                                                                                                                                                                                                                                    |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Battery API Mode | Fronius Web API battery mode: `Auto` or `Manual`.                                                                                                                                                                                                                                              |
+| Charge from AC   | Web API toggle for `HYB_BM_CHARGEFROMAC`. This is also auto-enabled when Modbus `Charge from Grid` is selected from the integration.                                                                                                                                                          |
+| Charge from grid | Web API toggle for `HYB_EVU_CHARGEFROMGRID`. This is also auto-enabled when Modbus `Charge from Grid` is selected from the integration.                                                                                                                                                        |
 | Target Feed In   | Manual Fronius target feed-in in watts. Positive values target feed-in watts. Negative values target grid consumption watts, and the inverter will target that grid consumption even when PV power is available. This setting is ignored by the inverter when battery charging is unavailable. |
-| SOC Maximum      | `BAT_M0_SOC_MAX` from the Web API.                                                                                        |
+| SOC Maximum      | `BAT_M0_SOC_MAX` from the Web API.                                                                                                                                                                                                                                                             |
 
 ### Storage Control Modes
 
@@ -118,7 +98,7 @@ The only built-in cross-protocol synchronization is reserve:
 | PV Charge Limit               | The storage can be charged with PV power at a limited rate. Limit will be set to maximum power after change.                                                                                                                                                                                                                                                                                                                                    |
 | Discharge Limit               | The storage can be charged with PV power and discharged at a limited rate. in Fronius Web UI. Limit will be set to maximum power after change.                                                                                                                                                                                                                                                                                                  |
 | PV Charge and Discharge Limit | Allows setting both PV charge and discharge limits. Limits will be set to maximum power after change.                                                                                                                                                                                                                                                                                                                                           |
-| Charge from Grid              | The storage will be charged from the grid using the charge rate from 'Grid Charge Power'. Power will be set 0 after change. Set the Grid Charge Power to a number in Watts, in a multiple of '10'. If the number is not rounded to 10, it will not work and does odd things like charging at 500W. If you need to press 'increment' to get it to charge, its likely the 10 issue. You do not need to fiddle with the 'Minimum Reserve' setting. |
+| Charge from Grid              | The storage will be charged from the grid using the charge rate from 'Grid Charge Power'. Power will be set 0 after change. Set the Grid Charge Power to a number in Watts, in a multiple of '10'. If the number is not rounded to 10, it will not work and does odd things like charging at 500W. If you need to press 'increment' to get it to charge, its likely the 10 issue. You do not need to fiddle with the 'Minimum Reserve' setting. When this mode is selected from the integration and Web API is configured, `Charge from grid` and `Charge from AC` are also enabled. |
 | Discharge to Grid             | The storage will discharge to the gird using the discharge rate from 'Gird Discharge Power'. Power will be set 0 after change.                                                                                                                                                                                                                                                                                                                  |
 | Block discharging             | The storage can only be charged with PV power. Charge limit will be set to maximum power.                                                                                                                                                                                                                                                                                                                                                       |
 | Block charging                | The can only be discharged and won't be charged with PV power. Discharge limit will be set to maximum power.                                                                                                                                                                                                                                                                                                                                    |
@@ -154,13 +134,6 @@ Note to change the mode first then set controls active in that mode.
 | Charge Status   | Holding / Charging / Discharging                                                                     |
 | Minimum Reserve | Shared minimum reserve value. When Web API is configured this follows the Web API SoC minimum value. |
 | State of Charge | The current battery level                                                                            |
-
-### Diagnostic
-
-| Entity                   | Description                                              |
-| ------------------------ | -------------------------------------------------------- |
-| Web API charge from AC   | `HYB_BM_CHARGEFROMAC` from the authenticated Web API.    |
-| Web API charge from grid | `HYB_EVU_CHARGEFROMGRID` from the authenticated Web API. |
 
 ### Inverter Sensors
 

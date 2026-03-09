@@ -55,6 +55,11 @@ STORAGE_API_SELECT_TYPES = [
     ['Battery API mode', 'api_battery_mode', API_BATTERY_MODE],
 ]
 
+STORAGE_API_SWITCH_TYPES = [
+    ['Charge from AC', 'api_charge_from_ac', 'mdi:power-plug-battery'],
+    ['Charge from grid', 'api_charge_from_grid', 'mdi:transmission-tower-export'],
+]
+
 STORAGE_MODBUS_NUMBER_TYPES = [
     ['Grid discharge power', 'grid_discharge_power', {'min': 0, 'max': 10100, 'step': 10, 'mode':'box', 'unit': 'W', 'max_key': 'MaxDisChaRte'}],
     ['Grid charge power', 'grid_charge_power', {'min': 0, 'max': 10100, 'step': 10, 'mode':'box', 'unit': 'W', 'max_key': 'MaxChaRte'}],
@@ -175,9 +180,4 @@ STORAGE_SENSOR_TYPES = {
     'WHRtg': ['Capacity', 'WHRtg',  SensorDeviceClass.ENERGY, SensorStateClass.MEASUREMENT, 'Wh', None, EntityCategory.DIAGNOSTIC],
     'MaxChaRte': ['Maximum charge rate', 'MaxChaRte',  SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', None, EntityCategory.DIAGNOSTIC],
     'MaxDisChaRte': ['Maximum discharge rate', 'MaxDisChaRte',  SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', None, EntityCategory.DIAGNOSTIC],
-}
-
-STORAGE_API_SENSOR_TYPES = {
-    'api_charge_from_ac': ['Web API charge from AC', 'api_charge_from_ac', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'api_charge_from_grid': ['Web API charge from grid', 'api_charge_from_grid', None, None, None, None, EntityCategory.DIAGNOSTIC],
 }

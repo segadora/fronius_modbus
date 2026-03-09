@@ -4,20 +4,20 @@
         "step": {
             "user": {
                 "title": "Set up Fronius System",
-                "description": "Please provide the Fronius host and required customer password. Optionally restrict auto-enabled Modbus to this Home Assistant host IP.",
+                "description": "Please provide the Fronius host and required customer password. Optionally restrict Modbus Control to this Home Assistant host IP.",
                 "data": {
                     "host": "Host",
                     "api_password": "Customer password",
-                    "restrict_modbus_to_this_ip": "Restrict Modbus to this IP"
+                    "restrict_modbus_to_this_ip": "Restrict Modbus Control to this IP"
                 }
             },
             "reconfigure": {
                 "title": "Review Fronius System",
-                "description": "Review and save the Fronius host and required customer password for this migrated entry. Optionally restrict auto-enabled Modbus to this Home Assistant host IP.",
+                "description": "Review and save the Fronius host and required customer password for this migrated entry. Optionally restrict Modbus Control to this Home Assistant host IP.",
                 "data": {
                     "host": "Host",
                     "api_password": "Customer password",
-                    "restrict_modbus_to_this_ip": "Restrict Modbus to this IP"
+                    "restrict_modbus_to_this_ip": "Restrict Modbus Control to this IP"
                 }
             }
         },

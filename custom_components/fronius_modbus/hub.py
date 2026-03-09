@@ -231,8 +231,8 @@ class Hub:
         self.data['api_backup_reserved'] = self._as_int(battery_config.get('HYB_BACKUP_RESERVED'))
         if raw_mode == 1 and api_soc_min is not None:
             self.data['minimum_reserve'] = api_soc_min
-        self.data['api_charge_from_ac'] = self._enabled_state(battery_config.get('HYB_BM_CHARGEFROMAC'))
-        self.data['api_charge_from_grid'] = self._enabled_state(battery_config.get('HYB_EVU_CHARGEFROMGRID'))
+        self.data['api_charge_from_ac'] = self._enabled_bool(battery_config.get('HYB_BM_CHARGEFROMAC'))
+        self.data['api_charge_from_grid'] = self._enabled_bool(battery_config.get('HYB_EVU_CHARGEFROMGRID'))
 
     def _apply_web_modbus_config(self, modbus_config: dict[str, Any]) -> None:
         slave = modbus_config.get('slave') or {}
@@ -356,6 +356,11 @@ class Hub:
             is_enabled = bool(value)
         return 'Enabled' if is_enabled else 'Disabled'
 
+    def _enabled_bool(self, value: Any) -> bool:
+        if isinstance(value, str):
+            return value.strip().lower() in ['1', 'true', 'on', 'yes', 'enabled']
+        return bool(value)
+
     @property 
     def device_info_storage(self) -> dict:
         return {
@@ -443,6 +448,17 @@ class Hub:
             await self._client.set_charge_discharge_mode()
         elif mode == 4:
             await self._client.set_grid_charge_mode()
+            if self._webclient:
+                try:
+                    await self._set_api_charge_sources(
+                        charge_from_grid=True,
+                        charge_from_ac=True,
+                    )
+                except Exception as err:
+                    _LOGGER.warning(
+                        "Failed enabling Web API charge-source toggles after Modbus Charge from Grid: %s",
+                        err,
+                    )
         elif mode == 5:
             await self._client.set_grid_discharge_mode()
         elif mode == 6:
@@ -512,6 +528,45 @@ class Hub:
             soc_max=soc_max,
         )
         await self.refresh_web_data()
+
+    async def _set_api_charge_sources(
+        self,
+        *,
+        charge_from_grid: bool | None = None,
+        charge_from_ac: bool | None = None,
+    ) -> None:
+        if not self._webclient:
+            return
+
+        next_charge_from_grid = (
+            self._enabled_bool(self.data.get('api_charge_from_grid'))
+            if charge_from_grid is None
+            else bool(charge_from_grid)
+        )
+        next_charge_from_ac = (
+            self._enabled_bool(self.data.get('api_charge_from_ac'))
+            if charge_from_ac is None
+            else bool(charge_from_ac)
+        )
+
+        await self._hass.async_add_executor_job(
+            self._webclient.set_battery_charge_sources,
+            next_charge_from_grid,
+            next_charge_from_ac,
+        )
+        await self.refresh_web_data()
+
+    @toggle_busy
+    async def set_api_charge_sources(
+        self,
+        *,
+        charge_from_grid: bool | None = None,
+        charge_from_ac: bool | None = None,
+    ) -> None:
+        await self._set_api_charge_sources(
+            charge_from_grid=charge_from_grid,
+            charge_from_ac=charge_from_ac,
+        )
 
     async def set_ac_limit_rate(self, value):
         await self._client.set_ac_limit_rate(value)

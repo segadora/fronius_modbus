@@ -18,7 +18,6 @@ from .const import (
     INVERTER_STORAGE_SENSOR_TYPES,
     METER_SENSOR_TYPES,
     STORAGE_SENSOR_TYPES,
-    STORAGE_API_SENSOR_TYPES,
 )
 from .hub import Hub
 from .base import FroniusModbusBaseEntity
@@ -147,22 +146,6 @@ async def async_setup_entry(
                 entity_category=sensor_info[6],
             )
             entities.append(sensor)
-
-        if hub.web_api_configured:
-            for sensor_info in STORAGE_API_SENSOR_TYPES.values():
-                sensor = FroniusModbusSensor(
-                    coordinator=coordinator,
-                    device_info=hub.device_info_storage,
-                    name=sensor_info[0],
-                    key=sensor_info[1],
-                    device_class=sensor_info[2],
-                    state_class=sensor_info[3],
-                    unit=sensor_info[4],
-                    icon=sensor_info[5],
-                    entity_category=sensor_info[6],
-                )
-                entities.append(sensor)
-
     async_add_entities(entities)
     return True
 

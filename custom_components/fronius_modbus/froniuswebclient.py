@@ -219,3 +219,10 @@ class FroniusWebClient:
             "HYB_BACKUP_RESERVED": backup_reserved,
         }
         return self._request("post", "/api/config/batteries", payload=payload).ok
+
+    def set_battery_charge_sources(self, charge_from_grid: bool, charge_from_ac: bool) -> bool:
+        payload = {
+            "HYB_EVU_CHARGEFROMGRID": bool(charge_from_grid),
+            "HYB_BM_CHARGEFROMAC": bool(charge_from_ac),
+        }
+        return self._request("post", "/api/config/batteries", payload=payload).ok

@@ -33,7 +33,7 @@ from . import hub
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.SELECT, Platform.NUMBER, Platform.SENSOR]
+PLATFORMS = [Platform.SELECT, Platform.SWITCH, Platform.NUMBER, Platform.SENSOR]
 
 type HubConfigEntry = ConfigEntry[hub.Hub]
 
@@ -61,6 +61,11 @@ LEGACY_RENAMED_ENTITY_KEYS = (
     "export_limit_enable",
 )
 
+LEGACY_REPLACED_WEB_API_SENSOR_KEYS = (
+    "api_charge_from_ac",
+    "api_charge_from_grid",
+)
+
 MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX = "legacy_modbus_only_reconfigure_"
 
 def _is_legacy_mppt_unique_id(unique_id: str) -> bool:
@@ -71,12 +76,20 @@ def _is_legacy_renamed_unique_id(unique_id: str) -> bool:
     return any(unique_id.endswith(f"_{key}") for key in LEGACY_RENAMED_ENTITY_KEYS)
 
 
+def _is_legacy_replaced_web_api_sensor_unique_id(unique_id: str) -> bool:
+    return any(unique_id.endswith(f"_{key}") for key in LEGACY_REPLACED_WEB_API_SENSOR_KEYS)
+
+
 async def _async_remove_legacy_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
     registry = er.async_get(hass)
     removed = 0
     for entity_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
         unique_id = entity_entry.unique_id or ""
-        if _is_legacy_mppt_unique_id(unique_id) or _is_legacy_renamed_unique_id(unique_id):
+        if (
+            _is_legacy_mppt_unique_id(unique_id)
+            or _is_legacy_renamed_unique_id(unique_id)
+            or _is_legacy_replaced_web_api_sensor_unique_id(unique_id)
+        ):
             registry.async_remove(entity_entry.entity_id)
             removed += 1
     if removed:
