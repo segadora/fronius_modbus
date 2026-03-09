@@ -215,9 +215,12 @@ class Hub:
         self.data['api_battery_power'] = raw_power
         self.data['api_soc_mode_raw'] = raw_soc_mode
         self.data['api_soc_mode'] = API_SOC_MODE.get(raw_soc_mode, raw_soc_mode)
-        self.data['api_soc_min'] = self._as_int(battery_config.get('BAT_M0_SOC_MIN'))
+        api_soc_min = self._as_int(battery_config.get('BAT_M0_SOC_MIN'))
+        self.data['api_soc_min'] = api_soc_min
         self.data['api_soc_max'] = self._as_int(battery_config.get('BAT_M0_SOC_MAX'))
         self.data['api_backup_reserved'] = self._as_int(battery_config.get('HYB_BACKUP_RESERVED'))
+        if api_soc_min is not None:
+            self.data['minimum_reserve'] = api_soc_min
         self.data['api_charge_from_ac'] = self._enabled_state(battery_config.get('HYB_BM_CHARGEFROMAC'))
         self.data['api_charge_from_grid'] = self._enabled_state(battery_config.get('HYB_EVU_CHARGEFROMGRID'))
 
@@ -246,46 +249,36 @@ class Hub:
 
     def _get_api_soc_values(
         self,
-        soc_min: int | None = None,
         soc_max: int | None = None,
-        backup_reserved: int | None = None,
     ) -> tuple[int, int, int]:
-        next_soc_min = self._as_int(self.data.get('api_soc_min')) if soc_min is None else int(soc_min)
+        next_soc_min = self._as_int(self.data.get('minimum_reserve'))
         next_soc_max = self._as_int(self.data.get('api_soc_max')) if soc_max is None else int(soc_max)
-        next_backup_reserved = (
-            self._as_int(self.data.get('api_backup_reserved'))
-            if backup_reserved is None
-            else int(backup_reserved)
-        )
+        next_backup_reserved = self._as_int(self.data.get('api_backup_reserved'))
 
-        next_soc_min = 6 if next_soc_min is None else next_soc_min
+        next_soc_min = 5 if next_soc_min is None else next_soc_min
         next_soc_max = 99 if next_soc_max is None else next_soc_max
         next_backup_reserved = 5 if next_backup_reserved is None else next_backup_reserved
 
-        if next_soc_min < 0 or next_soc_min > 100:
-            raise ValueError('Battery SOC minimum must be between 0 and 100')
+        if next_soc_min < 5 or next_soc_min > 100:
+            raise ValueError('Minimum reserve must be between 5 and 100')
         if next_soc_max < 0 or next_soc_max > 100:
             raise ValueError('Battery SOC maximum must be between 0 and 100')
         if next_backup_reserved < 5 or next_backup_reserved > 100:
             raise ValueError('Battery backup reserve must be between 5 and 100')
         if next_soc_min > next_soc_max:
-            raise ValueError('Battery SOC minimum must not exceed maximum')
+            raise ValueError('Minimum reserve must not exceed battery SOC maximum')
 
         return next_soc_min, next_soc_max, next_backup_reserved
 
     async def _set_api_soc_manual(
         self,
-        soc_min: int | None = None,
         soc_max: int | None = None,
-        backup_reserved: int | None = None,
     ) -> tuple[int, int, int] | None:
         if not self._webclient:
             return None
 
         next_soc_min, next_soc_max, next_backup_reserved = self._get_api_soc_values(
-            soc_min=soc_min,
             soc_max=soc_max,
-            backup_reserved=backup_reserved,
         )
         await self._hass.async_add_executor_job(
             self._webclient.set_battery_soc_config,
@@ -296,6 +289,7 @@ class Hub:
         )
         self.data['api_soc_mode_raw'] = 'manual'
         self.data['api_soc_mode'] = API_SOC_MODE['manual']
+        self.data['minimum_reserve'] = next_soc_min
         self.data['api_soc_min'] = next_soc_min
         self.data['api_soc_max'] = next_soc_max
         self.data['api_backup_reserved'] = next_backup_reserved
@@ -325,6 +319,17 @@ class Hub:
             return int(value) if value is not None else None
         except (TypeError, ValueError):
             return None
+
+    def _require_whole_number(self, value: Any, field_name: str) -> int:
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError) as err:
+            raise ValueError(f"{field_name} must be a whole number") from err
+
+        if not numeric_value.is_integer():
+            raise ValueError(f"{field_name} must be a whole number")
+
+        return int(numeric_value)
 
     def _enabled_state(self, value: Any) -> str:
         if isinstance(value, str):
@@ -430,13 +435,14 @@ class Hub:
 
     @toggle_busy
     async def set_minimum_reserve(self, value):
-        reserve_value = int(round(value))
+        reserve_value = self._require_whole_number(value, 'Minimum reserve')
         if reserve_value < 5 or reserve_value > 100:
             raise ValueError('Minimum reserve must be between 5 and 100')
-        await self._client.set_minimum_reserve(value)
+        await self._client.set_minimum_reserve(reserve_value)
         self.data['minimum_reserve'] = reserve_value
         if self._webclient:
-            await self._set_api_soc_manual(backup_reserved=reserve_value)
+            self.data['api_soc_min'] = reserve_value
+            await self._set_api_soc_manual()
             await self.refresh_web_data()
 
     @toggle_busy
@@ -489,21 +495,14 @@ class Hub:
     @toggle_busy
     async def set_api_soc_values(
         self,
-        soc_min: int | None = None,
         soc_max: int | None = None,
-        backup_reserved: int | None = None,
     ):
         if not self._webclient:
             return
 
-        _, _, next_backup_reserved = await self._set_api_soc_manual(
-            soc_min=soc_min,
+        await self._set_api_soc_manual(
             soc_max=soc_max,
-            backup_reserved=backup_reserved,
         )
-        if backup_reserved is not None:
-            await self._client.set_minimum_reserve(next_backup_reserved)
-            self.data['minimum_reserve'] = next_backup_reserved
         await self.refresh_web_data()
 
     async def set_ac_limit_rate(self, value):

@@ -133,12 +133,8 @@ class FroniusModbusNumber(FroniusModbusBaseEntity, NumberEntity):
             await self._hub.set_ac_limit_rate(value)
         elif self._key == 'api_battery_power':
             await self._hub.set_api_battery_power(value)
-        elif self._key == 'api_soc_min':
-            await self._hub.set_api_soc_values(soc_min=int(round(value)))
         elif self._key == 'api_soc_max':
             await self._hub.set_api_soc_values(soc_max=int(round(value)))
-        elif self._key == 'api_backup_reserved':
-            await self._hub.set_api_soc_values(backup_reserved=int(round(value)))
 
         self.async_write_ha_state()
 
@@ -165,7 +161,7 @@ class FroniusModbusNumber(FroniusModbusBaseEntity, NumberEntity):
                 self._hub.web_api_configured
                 and data.get('api_battery_mode_raw') == 1
             )
-        if self._key in ['api_soc_min', 'api_soc_max', 'api_backup_reserved']:
+        if self._key == 'api_soc_max':
             return (
                 self._hub.web_api_configured
                 and data.get('api_soc_mode_raw') == 'manual'
