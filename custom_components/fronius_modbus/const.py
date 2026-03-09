@@ -27,7 +27,7 @@ SUPPORTED_MANUFACTURERS = ['Fronius']
 SUPPORTED_MODELS = ['Primo GEN24', 'Symo GEN24', 'Verto']
 
 API_BATTERY_MODE = {
-    0: 'Automatic',
+    0: 'Auto',
     1: 'Manual',
 }
 
