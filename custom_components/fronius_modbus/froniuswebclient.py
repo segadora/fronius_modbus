@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -35,6 +36,28 @@ class XHeaderDigestAuth(HTTPDigestAuth):
         return super().handle_401(r, **kwargs)
 
 
+def _clean_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        cleaned = value.strip()
+        return cleaned or None
+    cleaned = str(value).strip()
+    return cleaned or None
+
+
+def _parse_json_object(value: Any) -> dict[str, Any]:
+    if not isinstance(value, str):
+        return {}
+    try:
+        parsed = json.loads(value)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    return parsed
+
+
 class FroniusWebClient:
     """Minimal authenticated client for the Fronius web API."""
 
@@ -68,6 +91,47 @@ class FroniusWebClient:
 
     def get_modbus_config(self) -> dict[str, Any]:
         return self._request("get", "/api/config/modbus").json()
+
+    def get_storage_info(self) -> dict[str, str | None]:
+        info: dict[str, str | None] = {
+            "manufacturer": None,
+            "model": "Battery Storage",
+            "serial": None,
+        }
+
+        try:
+            data = self._request("get", "/api/components/BatteryManagementSystem/readable").json()
+            body = data.get("Body") or {}
+            nodes = body.get("Data") or {}
+            if not isinstance(nodes, dict) or not nodes:
+                return info
+
+            device = next(iter(nodes.values()))
+            if not isinstance(device, dict):
+                return info
+
+            attributes = device.get("attributes") or {}
+            if not isinstance(attributes, dict):
+                return info
+
+            nameplate = _parse_json_object(attributes.get("nameplate"))
+            manufacturer = _clean_text(nameplate.get("manufacturer")) or _clean_text(attributes.get("manufacturer"))
+            model = (
+                _clean_text(attributes.get("model"))
+                or _clean_text(nameplate.get("model"))
+                or _clean_text(attributes.get("DisplayName"))
+            )
+            serial = _clean_text(attributes.get("serial")) or _clean_text(nameplate.get("serial"))
+
+            if manufacturer is not None:
+                info["manufacturer"] = manufacturer
+            if model is not None:
+                info["model"] = model
+            if serial is not None:
+                info["serial"] = serial
+        except Exception as err:
+            _LOGGER.warning("Failed reading storage identity via web API from %s: %s", self._host, err)
+        return info
 
     def ensure_modbus_enabled(
         self,

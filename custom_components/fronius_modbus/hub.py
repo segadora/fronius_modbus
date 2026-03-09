@@ -179,7 +179,14 @@ class Hub:
         await self._client.init_data()
 
         if self.storage_configured:
-            await self._hass.async_add_executor_job(self._client.get_json_storage_info)
+            self._client.reset_storage_info()
+            if self.web_api_configured:
+                storage_info = await self._hass.async_add_executor_job(self._webclient.get_storage_info)
+                self._client.set_storage_info(
+                    manufacturer=storage_info.get("manufacturer"),
+                    model=storage_info.get("model"),
+                    serial=storage_info.get("serial"),
+                )
 
         if self.web_api_configured:
             await self.refresh_web_data()

@@ -5,7 +5,6 @@ import logging
 import time
 from typing import Optional
 from .extmodbusclient import ExtModbusClient
-import requests
 
 from .froniusmodbusclient_const import (
     INVERTER_ADDRESS,
@@ -71,6 +70,26 @@ class FroniusModbusClient(ExtModbusClient):
 
         self._export_limit_enable_mask_until = 0.0
         self.data = {}
+        self.reset_storage_info()
+
+    def reset_storage_info(self) -> None:
+        self.data["s_manufacturer"] = None
+        self.data["s_model"] = "Battery Storage"
+        self.data["s_serial"] = None
+
+    def set_storage_info(
+        self,
+        manufacturer: str | None = None,
+        model: str | None = None,
+        serial: str | None = None,
+    ) -> None:
+        self.reset_storage_info()
+        if manufacturer:
+            self.data["s_manufacturer"] = manufacturer
+        if model:
+            self.data["s_model"] = model
+        if serial:
+            self.data["s_serial"] = serial
 
     def _map_value(self, values: dict, key: int, field_name: str):
         value = values.get(key)
@@ -300,43 +319,6 @@ class FroniusModbusClient(ExtModbusClient):
         _LOGGER.debug(f"Init done. data: {self.data}")
 
         return True
-
-    def get_json_storage_info(self):
-        self.data['s_manufacturer'] = None
-        self.data['s_model'] = 'Battery Storage'
-        self.data['s_serial'] = None
-
-        url = f"http://{self._host}/solar_api/v1/GetStorageRealtimeData.cgi"
-
-        try:
-            response = requests.get(url, timeout=5)
-
-            if response.status_code == 200:
-                data = response.json()
-            else:
-                _LOGGER.error(f"Error storage json data {response.status_code}")
-                return
-
-            try:
-                bodydata = data['Body']['Data']
-            except Exception as e:
-                _LOGGER.error(f"Error no body data in json data: {data}")
-                return
-    
-            for c in bodydata.keys():
-                try:
-                    details = bodydata[c]['Controller']['Details']
-                except Exception as e:
-                    _LOGGER.error(f"Error no details in json bodydata: {bodydata}")
-                    return
-
-                self.data['s_manufacturer'] = details['Manufacturer']
-                self.data['s_model'] = details['Model']
-                self.data['s_serial'] = str(details['Serial']).strip()
-                break
-
-        except Exception as e:
-            _LOGGER.error(f"Error storage json data {url} {e}", exc_info=True)
 
     async def read_device_info_data(self, prefix, unit_id):
         regs = await self.get_registers(unit_id=unit_id, address=COMMON_ADDRESS, count=65)
