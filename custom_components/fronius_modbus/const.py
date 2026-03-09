@@ -12,11 +12,30 @@ DEFAULT_SCAN_INTERVAL = 10
 DEFAULT_PORT = 502
 DEFAULT_INVERTER_UNIT_ID = 1
 DEFAULT_METER_UNIT_ID = 200
+DEFAULT_AUTO_ENABLE_MODBUS = True
+DEFAULT_RESTRICT_MODBUS_TO_THIS_IP = False
+FIXED_API_USERNAME = "customer"
+CONF_RECONFIGURE_REQUIRED = "_reconfigure_required"
+MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX = "legacy_modbus_only_reconfigure_"
 CONF_INVERTER_UNIT_ID = 'inverter_modbus_unit_id'
 CONF_METER_UNIT_ID = 'meter_modbus_unit_id'
+CONF_API_USERNAME = 'api_username'
+CONF_API_PASSWORD = 'api_password'
+CONF_AUTO_ENABLE_MODBUS = 'auto_enable_modbus'
+CONF_RESTRICT_MODBUS_TO_THIS_IP = 'restrict_modbus_to_this_ip'
 ATTR_MANUFACTURER = 'Fronius'
 SUPPORTED_MANUFACTURERS = ['Fronius']
 SUPPORTED_MODELS = ['Primo GEN24', 'Symo GEN24', 'Verto']
+
+API_BATTERY_MODE = {
+    0: 'Auto',
+    1: 'Manual',
+}
+
+API_SOC_MODE = {
+    'auto': 'Automatic',
+    'manual': 'Manual',
+}
 
 STORAGE_EXT_CONTROL_MODE = {
     0: 'Auto',
@@ -27,28 +46,40 @@ STORAGE_EXT_CONTROL_MODE = {
     5: 'Discharge to Grid',
     6: 'Block Discharging',
     7: 'Block Charging',
-#    8: 'Calibrate',
 }
 
-STORAGE_SELECT_TYPES = [
+STORAGE_MODBUS_SELECT_TYPES = [
     ['Storage Control Mode', 'ext_control_mode', STORAGE_EXT_CONTROL_MODE],
 ]
 
-STORAGE_NUMBER_TYPES = [
+STORAGE_API_SELECT_TYPES = [
+    ['Battery API mode', 'api_battery_mode', API_BATTERY_MODE],
+]
+
+STORAGE_API_SWITCH_TYPES = [
+    ['Charge from AC', 'api_charge_from_ac', 'mdi:power-plug-battery'],
+    ['Charge from grid', 'api_charge_from_grid', 'mdi:transmission-tower-export'],
+]
+
+STORAGE_MODBUS_NUMBER_TYPES = [
     ['Grid discharge power', 'grid_discharge_power', {'min': 0, 'max': 10100, 'step': 10, 'mode':'box', 'unit': 'W', 'max_key': 'MaxDisChaRte'}],
     ['Grid charge power', 'grid_charge_power', {'min': 0, 'max': 10100, 'step': 10, 'mode':'box', 'unit': 'W', 'max_key': 'MaxChaRte'}],
     ['Discharge limit', 'discharge_limit',  {'min': 0, 'max': 10100, 'step': 10, 'mode':'box', 'unit': 'W', 'max_key': 'MaxDisChaRte'}],
     ['PV charge limit', 'charge_limit', {'min': 0, 'max': 10100, 'step': 10, 'mode':'box', 'unit': 'W', 'max_key': 'MaxChaRte'}],
-    ['Minimum reserve', 'minimum_reserve', {'min': 5, 'max': 100, 'step': 1, 'mode':'box', 'unit': '%'}],
-#    ['Reserve Target', 'reserve_target', {'min': 0, 'max': 100, 'unit': '%'}],
+    ['SoC Minimum', 'soc_minimum', {'min': 5, 'max': 100, 'step': 1, 'mode':'box', 'unit': '%'}],
+]
+
+STORAGE_API_NUMBER_TYPES = [
+    ['Target feed in', 'api_battery_power', {'min': -20000, 'max': 20000, 'step': 10, 'mode': 'box', 'unit': 'W'}],
+    ['SoC Maximum', 'soc_maximum', {'min': 0, 'max': 100, 'step': 1, 'mode': 'box', 'unit': '%'}],
 ]
 
 INVERTER_NUMBER_TYPES = [
-    ['Export limit rate', 'export_limit_rate', {'min': 0, 'max': 50000, 'step': 10, 'mode':'box', 'unit': 'W', 'max_key': 'max_power'}],
+    ['AC limit rate', 'ac_limit_rate', {'min': 0, 'max': 50000, 'step': 10, 'mode':'box', 'unit': 'W', 'max_key': 'max_power'}],
 ]
 
 INVERTER_SELECT_TYPES = [
-    ['Export limit enable', 'export_limit_enable', {0: 'Disabled', 1: 'Enabled'}],
+    ['AC limit enable', 'ac_limit_enable', {0: 'Disabled', 1: 'Enabled'}],
     ['Inverter connection', 'Conn', {0: 'Disabled', 1: 'Enabled'}],
 ]
 
@@ -62,14 +93,13 @@ INVERTER_SENSOR_TYPES = {
     'load': ['Load', 'load', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:lightning-bolt', None],
     'pv_connection': ['PV connection', 'pv_connection', None, None, None, None, EntityCategory.DIAGNOSTIC],
     'ecp_connection': ['Electrical connection', 'ecp_connection', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    #'status': ['Status Base', 'status', None, None, None, None, None],
-    'statusvendor': ['Status', 'statusvendor', None, None, None, None, EntityCategory.DIAGNOSTIC],
+    'status': ['Status', 'status', None, None, None, None, EntityCategory.DIAGNOSTIC],
+    'statusvendor': ['Vendor status', 'statusvendor', None, None, None, None, EntityCategory.DIAGNOSTIC],
     'line_frequency': ['Line frequency', 'line_frequency', SensorDeviceClass.FREQUENCY, SensorStateClass.MEASUREMENT, 'Hz', None, None],
     'inverter_controls': ['Control mode', 'inverter_controls', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    #'vref': ['Reference Voltage', 'vref', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
-    #'vrefofs': ['Reference Voltage offset', 'vrefofs', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
+    'vref': ['Reference voltage', 'vref', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', EntityCategory.DIAGNOSTIC],
+    'vrefofs': ['Reference voltage offset', 'vrefofs', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', EntityCategory.DIAGNOSTIC],
     'max_power': ['Maximum power', 'max_power', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:lightning-bolt', None],
-    #'events1': ['Events Customer', 'events1', None, None, None, None, EntityCategory.DIAGNOSTIC],    
     'events2': ['Events', 'events2', None, None, None, None, EntityCategory.DIAGNOSTIC],    
 
     'grid_status': ['Grid status', 'grid_status', None, None, None, None, EntityCategory.DIAGNOSTIC],
@@ -80,9 +110,17 @@ INVERTER_SENSOR_TYPES = {
     'VArPct_Ena': ['Limit VAr control', 'VArPct_Ena', None, None, None, None, EntityCategory.DIAGNOSTIC],
     'PhVphA': ['AC voltage L1-N', 'PhVphA', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
     'unit_id': ['Modbus ID', 'i_unit_id', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'export_limit_rate': ['Export limit rate', 'export_limit_rate', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:chart-line', None],
-    'export_limit_enable': ['Export limit enabled', 'export_limit_enable', None, None, None, 'mdi:power-plug', EntityCategory.DIAGNOSTIC],
+    'ac_limit_rate': ['AC limit rate', 'ac_limit_rate', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:chart-line', None],
+    'ac_limit_enable': ['AC limit enabled', 'ac_limit_enable', None, None, None, 'mdi:power-plug', EntityCategory.DIAGNOSTIC],
     'isolation_resistance': ['Isolation Resistance', 'isolation_resistance', None, SensorStateClass.MEASUREMENT, 'MΩ', 'mdi:omega', None],
+}
+
+INVERTER_WEB_SENSOR_TYPES = {
+    'api_modbus_mode': ['Web API Modbus mode', 'api_modbus_mode', None, None, None, None, EntityCategory.DIAGNOSTIC],
+    'api_modbus_control': ['Web API Modbus control', 'api_modbus_control', None, None, None, None, EntityCategory.DIAGNOSTIC],
+    'api_modbus_sunspec_mode': ['Web API SunSpec mode', 'api_modbus_sunspec_mode', None, None, None, None, EntityCategory.DIAGNOSTIC],
+    'api_modbus_restriction': ['Web API Modbus restriction', 'api_modbus_restriction', None, None, None, None, EntityCategory.DIAGNOSTIC],
+    'api_modbus_restriction_ip': ['Web API Modbus restriction IP', 'api_modbus_restriction_ip', None, None, None, None, EntityCategory.DIAGNOSTIC],
 }
 
 MPPT_MODULE_SENSOR_TYPES = [
@@ -138,11 +176,9 @@ STORAGE_SENSOR_TYPES = {
     'soc': ['State of charge', 'soc', SensorDeviceClass.BATTERY, SensorStateClass.MEASUREMENT, '%', None, None],
     'charging_power': ['Charging power', 'charging_power',  None, None, '%', 'mdi:gauge', EntityCategory.DIAGNOSTIC],
     'discharging_power': ['Discharging power', 'discharging_power',  None, None, '%', 'mdi:gauge', EntityCategory.DIAGNOSTIC],
-    'minimum_reserve': ['Minimum reserve', 'minimum_reserve',  None, None, '%', 'mdi:gauge', None],
+    'soc_minimum': ['SoC Minimum', 'soc_minimum',  None, None, '%', 'mdi:gauge', None],
     'grid_charging': ['Grid charging', 'grid_charging',  None, None, None, None, EntityCategory.DIAGNOSTIC],
     'WHRtg': ['Capacity', 'WHRtg',  SensorDeviceClass.ENERGY, SensorStateClass.MEASUREMENT, 'Wh', None, EntityCategory.DIAGNOSTIC],
     'MaxChaRte': ['Maximum charge rate', 'MaxChaRte',  SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', None, EntityCategory.DIAGNOSTIC],
     'MaxDisChaRte': ['Maximum discharge rate', 'MaxDisChaRte',  SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', None, EntityCategory.DIAGNOSTIC],
-    #'WChaGra': ['Setpoint for maximum charge', 'WChaGra', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    #'WDisChaGra': ['Setpoint for maximum discharge', 'WDisChaGra', None, None, None, None, EntityCategory.DIAGNOSTIC],
 }

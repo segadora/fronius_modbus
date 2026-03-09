@@ -2,21 +2,16 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional, Dict, Any
 
 from homeassistant.components.sensor import (
     SensorEntity,
 )
-from homeassistant.const import CONF_NAME #, CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.icon import icon_for_battery_level
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.entity import Entity
-from homeassistant.core import callback
-from homeassistant.util import slugify
 
 from . import HubConfigEntry
 from .const import (
+    INVERTER_WEB_SENSOR_TYPES,
     INVERTER_SENSOR_TYPES,
     INVERTER_SYMO_SENSOR_TYPES,
     MPPT_MODULE_SENSOR_TYPES,
@@ -68,6 +63,21 @@ async def async_setup_entry(
         )
         entities.append(sensor)
 
+    if hub.web_api_configured:
+        for sensor_info in INVERTER_WEB_SENSOR_TYPES.values():
+            sensor = FroniusModbusSensor(
+                coordinator=coordinator,
+                device_info=hub.device_info_inverter,
+                name=sensor_info[0],
+                key=sensor_info[1],
+                device_class=sensor_info[2],
+                state_class=sensor_info[3],
+                unit=sensor_info[4],
+                icon=sensor_info[5],
+                entity_category=sensor_info[6],
+            )
+            entities.append(sensor)
+
     if hub._client.mppt_configured:
         module_count = int(hub._client.mppt_module_count)
         data = coordinator.data if isinstance(coordinator.data, dict) else {}
@@ -90,20 +100,23 @@ async def async_setup_entry(
                 entities.append(sensor)
 
     if hub.meter_configured:
-        meter_id = '1'
-        for sensor_info in METER_SENSOR_TYPES.values():
-            sensor = FroniusModbusSensor(
-                coordinator=coordinator,
-                device_info=hub.get_device_info_meter(meter_id),
-                name=f'Meter {meter_id} ' + sensor_info[0],
-                key=f'm{meter_id}_' + sensor_info[1],
-                device_class=sensor_info[2],
-                state_class=sensor_info[3],
-                unit=sensor_info[4],
-                icon=sensor_info[5],
-                entity_category=sensor_info[6],
-            )
-            entities.append(sensor)
+        for meter_idx, _ in enumerate(hub._client._meter_unit_ids, start=1):
+            meter_id = str(meter_idx)
+            if f'm{meter_id}_unit_id' not in hub.data:
+                continue
+            for sensor_info in METER_SENSOR_TYPES.values():
+                sensor = FroniusModbusSensor(
+                    coordinator=coordinator,
+                    device_info=hub.get_device_info_meter(meter_id),
+                    name=f'Meter {meter_id} ' + sensor_info[0],
+                    key=f'm{meter_id}_' + sensor_info[1],
+                    device_class=sensor_info[2],
+                    state_class=sensor_info[3],
+                    unit=sensor_info[4],
+                    icon=sensor_info[5],
+                    entity_category=sensor_info[6],
+                )
+                entities.append(sensor)
 
     if hub.storage_configured:
         for sensor_info in INVERTER_STORAGE_SENSOR_TYPES.values():
@@ -133,7 +146,6 @@ async def async_setup_entry(
                 entity_category=sensor_info[6],
             )
             entities.append(sensor)
-
     async_add_entities(entities)
     return True
 
@@ -154,5 +166,3 @@ class FroniusModbusSensor(FroniusModbusBaseEntity, SensorEntity):
     @property
     def extra_state_attributes(self):
         return None
-
-

@@ -1,13 +1,11 @@
 import logging
-from typing import Optional, Dict, Any
 
 from .const import (
-    STORAGE_SELECT_TYPES,
+    STORAGE_API_SELECT_TYPES,
+    STORAGE_MODBUS_SELECT_TYPES,
     INVERTER_SELECT_TYPES,
 )
 
-from homeassistant.core import callback
-from homeassistant.const import CONF_NAME
 from homeassistant.components.select import (
     SelectEntity,
 )
@@ -24,7 +22,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities) -> None:
     entities = []
 
     if hub.storage_configured:
-        for select_info in STORAGE_SELECT_TYPES:
+        for select_info in STORAGE_MODBUS_SELECT_TYPES:
             select = FroniusModbusSelect(
                 coordinator=coordinator,
                 device_info=hub.device_info_storage,
@@ -35,7 +33,19 @@ async def async_setup_entry(hass, config_entry, async_add_entities) -> None:
             )
             entities.append(select)
 
-    # Add inverter select entities (export limit enable)
+        if hub.web_api_configured:
+            for select_info in STORAGE_API_SELECT_TYPES:
+                select = FroniusModbusSelect(
+                    coordinator=coordinator,
+                    device_info=hub.device_info_storage,
+                    name=select_info[0],
+                    key=select_info[1],
+                    options=select_info[2],
+                    hub=hub,
+                )
+                entities.append(select)
+
+    # Add inverter select entities.
     for select_info in INVERTER_SELECT_TYPES:
         select = FroniusModbusSelect(
             coordinator=coordinator,
@@ -81,8 +91,10 @@ class FroniusModbusSelect(FroniusModbusBaseEntity, SelectEntity):
 
         if self._key == 'ext_control_mode':
             await self._hub.set_mode(new_mode)
-        elif self._key == 'export_limit_enable':
-            await self._hub.set_export_limit_enable(new_mode)
+        elif self._key == 'api_battery_mode':
+            await self._hub.set_api_battery_mode(new_mode)
+        elif self._key == 'ac_limit_enable':
+            await self._hub.set_ac_limit_enable(new_mode)
         elif self._key == 'Conn':
             await self._hub.set_conn_status(new_mode)
 
@@ -90,3 +102,9 @@ class FroniusModbusSelect(FroniusModbusBaseEntity, SelectEntity):
         if self.coordinator.data:
             self.coordinator.data[self._key] = option
         self.async_write_ha_state()
+
+    @property
+    def available(self) -> bool:
+        if not super().available:
+            return False
+        return True

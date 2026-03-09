@@ -29,6 +29,8 @@ class FroniusModbusBaseEntity(CoordinatorEntity):
         if options is not None:
             self._options_dict = options
             self._attr_options = list(options.values())
+        if unit is not None:
+            self._attr_native_unit_of_measurement = unit
         if min is not None:
             self._attr_native_min_value = min
         if max is not None:
