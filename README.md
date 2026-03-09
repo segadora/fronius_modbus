@@ -90,6 +90,7 @@ The only built-in cross-protocol synchronization is reserve:
 
 - writing `Minimum Reserve` also writes the API SoC minimum and forces API SOC mode to `manual`
 - all battery API writes send `BAT_M0_SOC_MODE: "manual"`
+- `Target Feed In` is ignored by the inverter when battery charging is unavailable
 
 ### Controls
 
@@ -106,7 +107,7 @@ The only built-in cross-protocol synchronization is reserve:
 | Entity           | Description                                                                                                               |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | Battery API Mode | Fronius Web API battery mode: `Automatic` or `Manual`.                                                                    |
-| Target Power     | Manual Fronius battery power target in watts. Negative values target feed-in watts, positive values target battery watts. |
+| Target Feed In   | Manual Fronius target feed-in in watts. Positive values target feed-in watts. Negative values target grid consumption watts, and the inverter will target that grid consumption even when PV power is available. This setting is ignored by the inverter when battery charging is unavailable. |
 | SOC Maximum      | `BAT_M0_SOC_MAX` from the Web API.                                                                                        |
 
 ### Storage Control Modes

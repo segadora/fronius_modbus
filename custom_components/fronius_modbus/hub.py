@@ -222,7 +222,7 @@ class Hub:
 
         self.data['api_battery_mode_raw'] = raw_mode
         self.data['api_battery_mode'] = API_BATTERY_MODE.get(raw_mode, f'Unknown ({raw_mode})') if raw_mode is not None else None
-        self.data['api_battery_power'] = raw_power
+        self.data['api_battery_power'] = -raw_power if raw_power is not None else None
         self.data['api_soc_mode_raw'] = raw_soc_mode
         self.data['api_soc_mode'] = API_SOC_MODE.get(raw_soc_mode, raw_soc_mode)
         api_soc_min = self._as_int(battery_config.get('BAT_M0_SOC_MIN'))
@@ -485,6 +485,8 @@ class Hub:
         power = self._as_int(self.data.get('api_battery_power'))
         if mode == 1 and power is None:
             power = 0
+        if mode == 1 and power is not None:
+            power = -power
         await self._hass.async_add_executor_job(self._webclient.set_battery_config, mode, power if mode == 1 else None)
         await self.refresh_web_data()
 
@@ -492,9 +494,9 @@ class Hub:
     async def set_api_battery_power(self, value: float):
         if not self._webclient:
             return
-        self._require_api_battery_mode_manual('Target power')
+        self._require_api_battery_mode_manual('Target feed in')
 
-        power = int(round(value))
+        power = -int(round(value))
         await self._hass.async_add_executor_job(self._webclient.set_battery_config, 1, power)
         await self.refresh_web_data()
 

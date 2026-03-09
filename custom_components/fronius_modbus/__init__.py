@@ -33,7 +33,7 @@ from . import hub
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.NUMBER, Platform.SELECT, Platform.SENSOR]
+PLATFORMS = [Platform.SELECT, Platform.NUMBER, Platform.SENSOR]
 
 type HubConfigEntry = ConfigEntry[hub.Hub]
 

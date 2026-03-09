@@ -64,7 +64,7 @@ STORAGE_MODBUS_NUMBER_TYPES = [
 ]
 
 STORAGE_API_NUMBER_TYPES = [
-    ['Target power', 'api_battery_power', {'min': -20000, 'max': 20000, 'step': 10, 'mode': 'box', 'unit': 'W'}],
+    ['Target feed in', 'api_battery_power', {'min': -20000, 'max': 20000, 'step': 10, 'mode': 'box', 'unit': 'W'}],
     ['SOC maximum', 'api_soc_max', {'min': 0, 'max': 100, 'step': 1, 'mode': 'box', 'unit': '%'}],
 ]
 
