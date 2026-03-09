@@ -162,8 +162,5 @@ class FroniusModbusNumber(FroniusModbusBaseEntity, NumberEntity):
                 and data.get('api_battery_mode_raw') == 1
             )
         if self._key == 'api_soc_max':
-            return (
-                self._hub.web_api_configured
-                and data.get('api_soc_mode_raw') == 'manual'
-            )
+            return self._hub.web_api_configured
         return False

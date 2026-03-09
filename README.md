@@ -88,6 +88,7 @@ If Web API credentials are configured, the integration exposes both Modbus batte
 The only built-in cross-protocol synchronization is reserve:
 
 - writing `Minimum Reserve` also writes the API SoC minimum and forces API SOC mode to `manual`
+- all battery API writes send `BAT_M0_SOC_MODE: "manual"`
 
 ### Controls
 
@@ -105,8 +106,7 @@ The only built-in cross-protocol synchronization is reserve:
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | Battery API Mode    | Fronius Web API battery mode: `Automatic` or `Manual`.                                                                             |
 | Battery API Power   | Manual Fronius battery power target in watts. Positive values mean consumption/charging, negative values mean feed-in/discharging. |
-| Battery SOC Mode    | Fronius Web API SOC mode: `Automatic` or `Manual`.                                                                                 |
-| Battery SOC Maximum | `BAT_M0_SOC_MAX` from the Web API.                                                                                                 |
+| SOC Maximum         | `BAT_M0_SOC_MAX` from the Web API. All battery API writes force `BAT_M0_SOC_MODE` to `manual`.                                   |
 
 ### Storage Control Modes
 

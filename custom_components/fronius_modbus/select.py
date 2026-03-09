@@ -93,8 +93,6 @@ class FroniusModbusSelect(FroniusModbusBaseEntity, SelectEntity):
             await self._hub.set_mode(new_mode)
         elif self._key == 'api_battery_mode':
             await self._hub.set_api_battery_mode(new_mode)
-        elif self._key == 'api_soc_mode':
-            await self._hub.set_api_soc_mode(new_mode)
         elif self._key == 'ac_limit_enable':
             await self._hub.set_ac_limit_enable(new_mode)
         elif self._key == 'Conn':

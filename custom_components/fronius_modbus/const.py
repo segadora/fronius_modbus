@@ -51,7 +51,6 @@ STORAGE_MODBUS_SELECT_TYPES = [
 
 STORAGE_API_SELECT_TYPES = [
     ['Battery API mode', 'api_battery_mode', API_BATTERY_MODE],
-    ['Battery SOC mode', 'api_soc_mode', API_SOC_MODE],
 ]
 
 STORAGE_MODBUS_NUMBER_TYPES = [
@@ -64,7 +63,7 @@ STORAGE_MODBUS_NUMBER_TYPES = [
 
 STORAGE_API_NUMBER_TYPES = [
     ['Battery API power', 'api_battery_power', {'min': -20000, 'max': 20000, 'step': 10, 'mode': 'box', 'unit': 'W'}],
-    ['Battery SOC maximum', 'api_soc_max', {'min': 0, 'max': 100, 'step': 1, 'mode': 'box', 'unit': '%'}],
+    ['SOC maximum', 'api_soc_max', {'min': 0, 'max': 100, 'step': 1, 'mode': 'box', 'unit': '%'}],
 ]
 
 INVERTER_NUMBER_TYPES = [

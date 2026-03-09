@@ -282,7 +282,6 @@ class Hub:
         )
         await self._hass.async_add_executor_job(
             self._webclient.set_battery_soc_config,
-            'manual',
             next_soc_min,
             next_soc_max,
             next_backup_reserved,
@@ -479,17 +478,6 @@ class Hub:
 
         power = int(round(value))
         await self._hass.async_add_executor_job(self._webclient.set_battery_config, 1, power)
-        await self.refresh_web_data()
-
-    @toggle_busy
-    async def set_api_soc_mode(self, soc_mode: str):
-        if not self._webclient:
-            return
-
-        if soc_mode == 'manual':
-            await self._set_api_soc_manual()
-        else:
-            await self._hass.async_add_executor_job(self._webclient.set_battery_soc_config, 'auto')
         await self.refresh_web_data()
 
     @toggle_busy
