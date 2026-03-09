@@ -56,6 +56,7 @@ def _expand_user_input(user_input: dict[str, Any], defaults: dict[str, Any] | No
         payload.update(defaults)
     payload[CONF_HOST] = str(user_input.get(CONF_HOST, payload[CONF_HOST])).strip()
     payload[CONF_API_PASSWORD] = str(user_input.get(CONF_API_PASSWORD, payload[CONF_API_PASSWORD]))
+    payload[CONF_SCAN_INTERVAL] = int(user_input.get(CONF_SCAN_INTERVAL, payload[CONF_SCAN_INTERVAL]))
     payload[CONF_RESTRICT_MODBUS_TO_THIS_IP] = bool(
         user_input.get(CONF_RESTRICT_MODBUS_TO_THIS_IP, payload[CONF_RESTRICT_MODBUS_TO_THIS_IP])
     )
@@ -88,6 +89,10 @@ def _build_schema(defaults: dict[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required(CONF_HOST, default=defaults.get(CONF_HOST, "")): str,
+            vol.Required(
+                CONF_SCAN_INTERVAL,
+                default=defaults.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+            ): vol.Coerce(int),
             vol.Required(
                 CONF_API_PASSWORD,
                 default=defaults.get(CONF_API_PASSWORD, ""),
