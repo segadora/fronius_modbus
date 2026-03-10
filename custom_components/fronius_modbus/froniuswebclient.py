@@ -375,12 +375,19 @@ class FroniusWebClient:
     def get_battery_config(self) -> dict[str, Any]:
         return self._request("get", "/api/config/batteries").json()
 
-    def set_battery_config(self, mode: int, power: int | None = None) -> bool:
+    def set_battery_config(
+        self,
+        mode: int,
+        power: int | None = None,
+        soc_min: int | None = None,
+    ) -> bool:
         soc_mode = "manual" if int(mode) == 1 else "auto"
         payload: dict[str, Any] = {
             "HYB_EM_MODE": mode,
             "BAT_M0_SOC_MODE": soc_mode,
         }
+        if int(mode) == 1 and soc_min is not None:
+            payload["BAT_M0_SOC_MIN"] = int(soc_min)
         if int(mode) != 1:
             payload["BAT_M0_SOC_MIN"] = 5
             payload["BAT_M0_SOC_MAX"] = 100

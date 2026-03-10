@@ -705,19 +705,26 @@ class Hub:
         if not self._webclient:
             return
 
+        current_effective_mode = self._as_int(self.data.get('api_battery_mode_effective_raw'))
         display_power = self._as_int(self.data.get('api_battery_power'))
         if mode == 1 and display_power is None:
             display_power = 0
         power = -display_power if mode == 1 and display_power is not None else None
+        soc_min = None
+        if mode == 1 and current_effective_mode != 1:
+            soc_min = self._as_int(self.data.get('soc_minimum'))
         await self._async_web_job(
             self._webclient.set_battery_config,
             mode,
             power,
+            soc_min,
             raise_on_auth_failure=True,
         )
         self._set_effective_api_battery_mode(mode, 'manual' if mode == 1 else 'auto')
         if mode == 1:
             self.data['api_battery_power'] = display_power
+            if soc_min is not None:
+                self.data['api_soc_min'] = soc_min
         else:
             self.data['api_soc_min'] = 5
             self.data['soc_maximum'] = 100
