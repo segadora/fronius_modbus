@@ -6,11 +6,12 @@ import logging
 import os
 import re
 import socket
+from functools import lru_cache
 from typing import Any
 from urllib.parse import urlparse
 
 import requests
-from requests.auth import HTTPDigestAuth
+from requests.auth import AuthBase
 from requests.utils import parse_dict_header
 
 from .const import FIXED_API_USERNAME
@@ -18,9 +19,14 @@ from .const import FIXED_API_USERNAME
 _LOGGER = logging.getLogger(__name__)
 
 MASTER_RTUIF = {"master": {"rtuif": [{"if": "rtu0"}, {"if": "rtu1"}]}}
-LEGACY_DIGEST = "legacy_digest"
-FRONIUS_DIGEST = "fronius_digest"
-_STRATEGY_CACHE: dict[tuple[str, str], tuple[str, str | None]] = {}
+
+
+class ClientIpResolutionError(RuntimeError):
+    """Raised when the local IP for Modbus restriction cannot be resolved."""
+
+
+class FroniusWebAuthError(RuntimeError):
+    """Raised when Fronius Web API authentication fails."""
 
 
 def _as_int(value: Any, fallback: int) -> int:
@@ -36,231 +42,17 @@ def _is_enabled(value: Any) -> bool:
     return bool(value)
 
 
-def _normalize_base_url(host_or_url: str) -> str:
+def _base_url(host_or_url: str) -> str:
     if "://" in host_or_url:
         parsed = urlparse(host_or_url)
         return f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
     return f"http://{host_or_url}".rstrip("/")
 
 
-def _parse_digest_challenge(value: str) -> dict[str, str]:
+def _digest_challenge(value: str) -> dict[str, str]:
     if not value:
         return {}
     return parse_dict_header(re.sub(r"^Digest\s+", "", value, flags=re.IGNORECASE))
-
-
-def _probe_login(
-    host_or_url: str,
-    user: str,
-    timeout: float = 4.0,
-    verify: bool | None = None,
-) -> tuple[str, str | None]:
-    base_url = _normalize_base_url(host_or_url)
-    cache_key = (urlparse(base_url).netloc or base_url, user)
-    if cache_key in _STRATEGY_CACHE:
-        return _STRATEGY_CACHE[cache_key]
-
-    request_options: dict[str, object] = {"timeout": timeout}
-    if verify is not None:
-        request_options["verify"] = verify
-
-    hash_mode = None
-    try:
-        response = requests.get(f"{base_url}/api/status/common", **request_options)
-        response.raise_for_status()
-        version = (
-            response.json()
-            .get("authenticationOptions", {})
-            .get("digest", {})
-            .get(f"{user}HashingVersion")
-        )
-        if version is not None:
-            hash_mode = "md5" if version == 1 else "sha256"
-    except (requests.RequestException, ValueError):
-        pass
-
-    challenge = {}
-    try:
-        response = requests.get(
-            f"{base_url}/api/commands/Login",
-            params={"user": user},
-            **request_options,
-        )
-        challenge = _parse_digest_challenge(
-            response.headers.get("X-WWW-Authenticate", "")
-        )
-    except requests.RequestException:
-        pass
-
-    qop = challenge.get("qop", "")
-    algorithm = challenge.get("algorithm", "")
-
-    if algorithm.upper() == "SHA256" and "auth" in qop.split(","):
-        details = (FRONIUS_DIGEST, hash_mode)
-    else:
-        details = (LEGACY_DIGEST, None)
-
-    _STRATEGY_CACHE[cache_key] = details
-    return details
-
-
-class XHeaderDigestAuth(HTTPDigestAuth):
-    """Digest auth variant used by Fronius."""
-
-    def __init__(
-        self,
-        username: str,
-        password: str,
-        timeout: float = 4.0,
-        verify: bool | None = None,
-    ) -> None:
-        super().__init__(username, password)
-        self.timeout = timeout
-        self.verify = verify
-        self._strategy: str | None = None
-        self._hash_mode: str | None = None
-        self._last_nonce = ""
-        self._nonce_count = 0
-
-    def __call__(self, request):
-        self._ensure_strategy(request.url)
-        if self._strategy == LEGACY_DIGEST:
-            return super().__call__(request)
-
-        self.init_per_thread_state()
-        try:
-            self._thread_local.pos = request.body.tell()
-        except AttributeError:
-            self._thread_local.pos = None
-        request.register_hook("response", self.handle_401)
-        request.register_hook("response", self.handle_redirect)
-        self._thread_local.num_401_calls = 1
-        return request
-
-    def handle_401(self, response: requests.Response, **kwargs: Any) -> requests.Response:
-        self._copy_authenticate_header(response)
-        self._ensure_strategy(response.request.url)
-        if self._strategy == LEGACY_DIGEST:
-            return super().handle_401(response, **kwargs)
-        return self._handle_fronius_401(response, **kwargs)
-
-    def _copy_authenticate_header(self, response: requests.Response) -> None:
-        if (
-            "www-authenticate" not in response.headers
-            and "X-WWW-Authenticate" in response.headers
-        ):
-            response.headers["www-authenticate"] = response.headers["X-WWW-Authenticate"]
-
-    def _ensure_strategy(self, url: str) -> None:
-        if self._strategy is not None:
-            return
-        self._strategy, self._hash_mode = _probe_login(
-            url,
-            self.username,
-            self.timeout,
-            self.verify,
-        )
-
-    def _handle_fronius_401(
-        self,
-        response: requests.Response,
-        **kwargs: Any,
-    ) -> requests.Response:
-        if response.status_code != 401:
-            return response
-        if self._thread_local.num_401_calls is not None:
-            if self._thread_local.num_401_calls >= 2:
-                return response
-            self._thread_local.num_401_calls += 1
-        if self._thread_local.pos is not None:
-            response.request.body.seek(self._thread_local.pos)
-
-        response.content
-        response.close()
-
-        challenge = _parse_digest_challenge(response.headers.get("www-authenticate", ""))
-        if not challenge or "realm" not in challenge or "nonce" not in challenge:
-            return response
-
-        request_uri = self._digest_uri(response.request.url)
-        prepared = response.request.copy()
-        prepared.headers["Authorization"] = self._build_fronius_header(
-            prepared.method,
-            request_uri,
-            challenge,
-        )
-        retried = response.connection.send(prepared, **kwargs)
-        self._copy_authenticate_header(retried)
-        retried.history.append(response)
-        retried.request = prepared
-        return retried
-
-    def _digest_uri(self, url: str) -> str:
-        parsed = urlparse(url)
-        path = parsed.path or "/"
-        if path == "/api/commands/Login":
-            return path
-        if parsed.query:
-            return f"{path}?{parsed.query}"
-        return path
-
-    def _hash_secret(self, realm: str) -> str:
-        value = f"{self.username}:{realm}:{self.password}".encode()
-        if self._hash_mode == "md5":
-            return hashlib.md5(value).hexdigest()
-        return hashlib.sha256(value).hexdigest()
-
-    def _build_fronius_header(
-        self,
-        method: str,
-        uri: str,
-        challenge: dict[str, str],
-    ) -> str:
-        nonce = challenge["nonce"]
-        qop = challenge.get("qop", "").split(",")[0]
-        opaque = challenge.get("opaque")
-
-        if nonce == self._last_nonce:
-            self._nonce_count += 1
-        else:
-            self._nonce_count = 1
-        self._last_nonce = nonce
-
-        nc_value = f"{self._nonce_count:08x}"
-        cnonce = os.urandom(8).hex()
-        ha2 = hashlib.sha256(f"{method.upper()}:{uri}".encode()).hexdigest()
-        response = hashlib.sha256(
-            f"{self._hash_secret(challenge['realm'])}:{nonce}:{nc_value}:{cnonce}:auth:{ha2}".encode()
-        ).hexdigest()
-
-        parts = [
-            f'username="{self.username}"',
-            f'realm="{challenge["realm"]}"',
-            f'nonce="{nonce}"',
-            f'uri="{uri}"',
-            f'response="{response}"',
-        ]
-        if opaque:
-            parts.append(f'opaque="{opaque}"')
-        if qop:
-            parts.append(f"qop={qop}")
-            parts.append(f"nc={nc_value}")
-            parts.append(f'cnonce="{cnonce}"')
-        return "Digest " + ", ".join(parts)
-
-
-def login(host: str, user: str, password: str, timeout: float = 4.0) -> bool:
-    url = f"http://{host}/api/commands/Login?user={user}"
-    response = requests.get(
-        url,
-        auth=XHeaderDigestAuth(user, password, timeout=timeout),
-        timeout=timeout,
-    )
-    return response.status_code == 200
-
-
-class ClientIpResolutionError(RuntimeError):
-    """Raised when the local IP for Modbus restriction cannot be resolved."""
 
 
 def _clean_text(value: Any) -> str | None:
@@ -302,15 +94,174 @@ def _parse_storage_info(attributes: Any) -> dict[str, str | None]:
     }
 
 
-class FroniusWebClient:
-    """Minimal authenticated client for the Fronius web API."""
+@lru_cache(maxsize=None)
+def _hash_mode(base_url: str, user: str, timeout: float) -> str:
+    try:
+        response = requests.get(f"{base_url}/api/status/common", timeout=timeout)
+        response.raise_for_status()
+        version = (
+            response.json()
+            .get("authenticationOptions", {})
+            .get("digest", {})
+            .get(f"{user}HashingVersion")
+        )
+    except (requests.RequestException, ValueError):
+        version = None
+    return "md5" if version == 1 else "sha256"
 
-    def __init__(self, host: str, username: str, password: str, timeout: float = 4.0) -> None:
+
+class XHeaderDigestAuth(AuthBase):
+    def __init__(
+        self,
+        username: str,
+        password: str = "",
+        token: dict[str, str] | None = None,
+        timeout: float = 4.0,
+    ) -> None:
+        self.username = username
+        self.password = password
+        self.timeout = timeout
+        self.base_url: str | None = None
+        self.token = token if isinstance(token, dict) else None
+        self.mode: str | None = None
+        self.last_nonce = ""
+        self.nonce_count = 0
+        self.saved_token: dict[str, str] | None = None
+
+    def __call__(self, request):
+        if self.base_url is None:
+            self.base_url = _base_url(request.url)
+        if self.mode is None:
+            self.mode = _hash_mode(self.base_url, self.username, self.timeout)
+        request.register_hook("response", self.handle_401)
+        return request
+
+    def handle_401(self, response: requests.Response, **kwargs: object) -> requests.Response:
+        if response.status_code != 401 or "Authorization" in response.request.headers:
+            return response
+
+        challenge = _digest_challenge(
+            response.headers.get("X-WWW-Authenticate")
+            or response.headers.get("www-authenticate", "")
+        )
+        if "realm" not in challenge or "nonce" not in challenge:
+            return response
+
+        response.content
+        response.close()
+
+        prepared = response.request.copy()
+        prepared.headers["Authorization"] = self._build_header(
+            prepared.method,
+            self._digest_uri(prepared.url),
+            challenge,
+        )
+        retried = response.connection.send(prepared, **kwargs)
+        retried.history.append(response)
+        retried.request = prepared
+        if retried.status_code != 401 and self.password:
+            self.saved_token = {
+                "realm": challenge["realm"],
+                "token": self._secret(challenge["realm"]),
+            }
+        return retried
+
+    def _digest_uri(self, url: str) -> str:
+        parsed = urlparse(url)
+        if parsed.path == "/api/commands/Login":
+            return parsed.path
+        return parsed.path + (f"?{parsed.query}" if parsed.query else "")
+
+    def _secret(self, realm: str) -> str:
+        if not self.password and self.token and self.token.get("realm") == realm:
+            return str(self.token["token"])
+        payload = f"{self.username}:{realm}:{self.password}".encode()
+        if self.mode == "md5":
+            return hashlib.md5(payload).hexdigest()
+        return hashlib.sha256(payload).hexdigest()
+
+    def _build_header(self, method: str, uri: str, challenge: dict[str, str]) -> str:
+        nonce = challenge["nonce"]
+        qop = challenge["qop"].split(",")[0]
+        if nonce == self.last_nonce:
+            self.nonce_count += 1
+        else:
+            self.nonce_count = 1
+        self.last_nonce = nonce
+
+        nc = f"{self.nonce_count:08x}"
+        cnonce = os.urandom(8).hex()
+        ha2 = hashlib.sha256(f"{method.upper()}:{uri}".encode()).hexdigest()
+        digest = hashlib.sha256(
+            f"{self._secret(challenge['realm'])}:{nonce}:{nc}:{cnonce}:{qop}:{ha2}".encode()
+        ).hexdigest()
+
+        parts = [
+            f'username="{self.username}"',
+            f'realm="{challenge["realm"]}"',
+            f'nonce="{nonce}"',
+            f'uri="{uri}"',
+            f'response="{digest}"',
+            f"qop={qop}",
+            f"nc={nc}",
+            f'cnonce="{cnonce}"',
+        ]
+        if challenge.get("opaque"):
+            parts.append(f'opaque="{challenge["opaque"]}"')
+        return "Digest " + ", ".join(parts)
+
+
+def _login_response(
+    host: str,
+    user: str,
+    password: str = "",
+    token: dict[str, str] | None = None,
+    timeout: float = 4.0,
+) -> tuple[requests.Response, XHeaderDigestAuth]:
+    auth = XHeaderDigestAuth(user, password=password, token=token, timeout=timeout)
+    response = requests.get(
+        f"http://{host}/api/commands/Login",
+        params={"user": user},
+        auth=auth,
+        timeout=timeout,
+    )
+    return response, auth
+
+
+def login(
+    host: str,
+    user: str,
+    password: str = "",
+    token: dict[str, str] | None = None,
+    timeout: float = 4.0,
+) -> bool:
+    response, _ = _login_response(host, user, password=password, token=token, timeout=timeout)
+    return response.status_code == 200
+
+
+def mint_token(host: str, user: str, password: str, timeout: float = 4.0) -> dict[str, str] | None:
+    response, auth = _login_response(host, user, password=password, timeout=timeout)
+    if response.status_code != 200:
+        return None
+    return auth.saved_token
+
+
+class FroniusWebClient:
+    """Authenticated client for the Fronius web API."""
+
+    def __init__(
+        self,
+        host: str,
+        username: str | None = None,
+        password: str = "",
+        token: dict[str, str] | None = None,
+        timeout: float = 4.0,
+    ) -> None:
         self._host = host
         self._username = FIXED_API_USERNAME
         self._password = password
         self._timeout = timeout
-        self._auth = XHeaderDigestAuth(self._username, password, timeout=self._timeout)
+        self._auth = XHeaderDigestAuth(self._username, password=password, token=token, timeout=self._timeout)
 
     def _url(self, path: str) -> str:
         return f"http://{self._host}{path}"
@@ -323,8 +274,13 @@ class FroniusWebClient:
             json=payload,
             timeout=self._timeout,
         )
+        if response.status_code in (401, 403):
+            raise FroniusWebAuthError(f"Fronius Web API auth failed with status {response.status_code}")
         response.raise_for_status()
         return response
+
+    def issued_token(self) -> dict[str, str] | None:
+        return self._auth.saved_token
 
     def _resolve_client_ip(self) -> str:
         try:
@@ -339,7 +295,13 @@ class FroniusWebClient:
         return client_ip
 
     def login(self) -> bool:
-        return login(self._host, self._username, self._password, self._timeout)
+        return login(
+            self._host,
+            self._username,
+            password=self._password,
+            token=self._auth.token,
+            timeout=self._timeout,
+        )
 
     def get_modbus_config(self) -> dict[str, Any]:
         return self._request("get", "/api/config/modbus").json()
@@ -351,6 +313,8 @@ class FroniusWebClient:
             device = next(iter(nodes.values()), {}) if isinstance(nodes, dict) else {}
             attributes = device.get("attributes") if isinstance(device, dict) else {}
             return _parse_storage_info(attributes)
+        except FroniusWebAuthError:
+            raise
         except Exception as err:
             _LOGGER.warning("Failed reading storage identity via web API from %s: %s", self._host, err)
         return _parse_storage_info(None)

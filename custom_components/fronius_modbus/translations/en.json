@@ -1,105 +1,129 @@
 {
-    "config": {
-        "title": "Fronius Modbus",
+  "config": {
+    "title": "Fronius Modbus",
+    "step": {
+      "user": {
+        "title": "Set up Fronius System",
+        "description": "Enter the host, update interval, and Modbus IP restriction. Minimum interval: 5 seconds. If this host has no stored token, the next step asks for the customer password.",
+        "data": {
+          "host": "Host",
+          "scan_interval": "Update interval (seconds)",
+          "restrict_modbus_to_this_ip": "Restrict Modbus to this IP"
+        }
+      },
+      "user_password": {
+        "title": "Customer Password",
+        "description": "Enter the customer password to create or refresh the stored token. The password is not stored in the config entry.",
+        "data": {
+          "api_password": "Customer password"
+        }
+      },
+      "reconfigure": {
+        "title": "Review Fronius System",
+        "description": "Review the host, update interval, and Modbus IP restriction. Minimum interval: 5 seconds. If the stored token is missing or invalid, the next step asks for the customer password.",
+        "data": {
+          "host": "Host",
+          "scan_interval": "Update interval (seconds)",
+          "restrict_modbus_to_this_ip": "Restrict Modbus to this IP"
+        }
+      },
+      "reconfigure_password": {
+        "title": "Customer Password",
+        "description": "Enter the customer password to create or refresh the stored token.",
+        "data": {
+          "api_password": "Customer password"
+        }
+      }
+    },
+    "abort": {
+      "reconfigure_successful": "Configuration updated successfully."
+    },
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "invalid_port": "Invalid port number",
+      "invalid_host": "Invalid host address",
+      "unsupported_hardware": "Unsupported hardware. See logs for details.",
+      "unknown": "An unknown error occurred",
+      "scan_interval_too_short": "Minimum update interval is 5 seconds.",
+      "modbus_address_conflict": "Modbus IDs are not unique",
+      "missing_api_password": "Customer password is required.",
+      "invalid_api_credentials": "Customer login failed. Check the password.",
+      "cannot_resolve_local_ip": "Could not determine the Home Assistant IP for Modbus restriction."
+    }
+  },
+  "issues": {
+    "legacy_modbus_only_entry_reconfigure": {
+      "title": "Review Fronius web API access",
+      "fix_flow": {
         "step": {
-            "user": {
-                "title": "Set up Fronius System",
-                "description": "Please provide the Fronius host, polling interval, and required customer password. The update interval applies to both Modbus and authenticated Web API polling. Minimum 5 seconds. Optionally restrict Modbus Control to this Home Assistant host IP.",
-                "data": {
-                    "host": "Host",
-                    "scan_interval": "Update interval (seconds)",
-                    "api_password": "Customer password",
-                    "restrict_modbus_to_this_ip": "Restrict Modbus Control to this IP"
-                }
-            },
-            "reconfigure": {
-                "title": "Review Fronius System",
-                "description": "Review and save the Fronius host, polling interval, and required customer password for this migrated entry. The update interval applies to both Modbus and authenticated Web API polling. Minimum 5 seconds. Optionally restrict Modbus Control to this Home Assistant host IP.",
-                "data": {
-                    "host": "Host",
-                    "scan_interval": "Update interval (seconds)",
-                    "api_password": "Customer password",
-                    "restrict_modbus_to_this_ip": "Restrict Modbus Control to this IP"
-                }
+          "init": {
+            "title": "Review Fronius System",
+            "description": "The entry \"{entry_title}\" needs a valid customer token. Review the host, update interval, and Modbus IP restriction. The next step asks for the customer password only if a new token is needed.",
+            "data": {
+              "host": "Host",
+              "scan_interval": "Update interval (seconds)",
+              "restrict_modbus_to_this_ip": "Restrict Modbus to this IP"
             }
+          },
+          "password": {
+            "title": "Customer Password",
+            "description": "Enter the customer password to create or refresh the stored token.",
+            "data": {
+              "api_password": "Customer password"
+            }
+          }
+        },
+        "error": {
+          "cannot_connect": "Failed to connect",
+          "invalid_port": "Invalid port number",
+          "invalid_host": "Invalid host address",
+          "unsupported_hardware": "Unsupported hardware. See logs for details.",
+          "unknown": "An unknown error occurred",
+          "scan_interval_too_short": "Minimum update interval is 5 seconds.",
+          "modbus_address_conflict": "Modbus IDs are not unique",
+          "missing_api_password": "Customer password is required.",
+          "invalid_api_credentials": "Customer login failed. Check the password.",
+          "cannot_resolve_local_ip": "Could not determine the Home Assistant IP for Modbus restriction."
         },
         "abort": {
-            "reconfigure_successful": "Configuration updated successfully."
+          "entry_not_found": "The Fronius entry no longer exists."
         },
-        "error": {
-            "cannot_connect": "Failed to connect",
-            "invalid_port": "Invalid port number",
-            "invalid_host": "Invalid host address",
-            "unsupported_hardware": "Unsupported hardware found. See error log for details.",
-            "unknown": "An unknown error occurred",
-            "scan_interval_too_short": "Scan interval is too short. Minimum 5 seconds.",
-            "modbus_address_conflict": "Modbus IDs are not unique",
-            "missing_api_password": "Customer password is required.",
-            "invalid_api_credentials": "Customer login failed. Check the customer password.",
-            "cannot_resolve_local_ip": "Could not determine this Home Assistant host IP for Modbus restriction."
+        "create_entry": {
+          "default": "Configuration updated successfully."
         }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Set up Fronius System",
+        "description": "Set the host, update interval, and Modbus IP restriction. Minimum interval: 5 seconds. If the stored token is missing or invalid, the next step asks for the customer password.",
+        "data": {
+          "host": "Host",
+          "scan_interval": "Update interval (seconds)",
+          "restrict_modbus_to_this_ip": "Restrict Modbus to this IP"
+        }
+      },
+      "password": {
+        "title": "Customer Password",
+        "description": "Enter the customer password to create or refresh the stored token.",
+        "data": {
+          "api_password": "Customer password"
+        }
+      }
     },
-    "issues": {
-        "legacy_modbus_only_entry_reconfigure": {
-            "title": "Review migrated Fronius configuration",
-            "fix_flow": {
-                "step": {
-                    "init": {
-                        "title": "Review Fronius System",
-                        "description": "The Fronius entry \"{entry_title}\" was created with an older version of this integration or is missing the required customer password. Review and save the current host, polling interval, and required customer password. The update interval applies to both Modbus and authenticated Web API polling. Minimum 5 seconds. Optionally restrict Modbus Control to this Home Assistant host IP.",
-                        "data": {
-                            "host": "Host",
-                            "scan_interval": "Update interval (seconds)",
-                            "api_password": "Customer password",
-                            "restrict_modbus_to_this_ip": "Restrict Modbus Control to this IP"
-                        }
-                    }
-                },
-                "error": {
-                    "cannot_connect": "Failed to connect",
-                    "invalid_port": "Invalid port number",
-                    "invalid_host": "Invalid host address",
-                    "unsupported_hardware": "Unsupported hardware found. See error log for details.",
-                    "unknown": "An unknown error occurred",
-                    "scan_interval_too_short": "Scan interval is too short. Minimum 5 seconds.",
-                    "modbus_address_conflict": "Modbus IDs are not unique",
-                    "missing_api_password": "Customer password is required.",
-                    "invalid_api_credentials": "Customer login failed. Check the customer password.",
-                    "cannot_resolve_local_ip": "Could not determine this Home Assistant host IP for Modbus restriction."
-                },
-                "abort": {
-                    "entry_not_found": "The Fronius entry no longer exists."
-                },
-                "create_entry": {
-                    "default": "Configuration updated successfully."
-                }
-            }
-        }
-    },
-    "options": {
-        "step": {
-            "init": {
-                "title": "Set up Fronius System",
-                "description": "Set the Fronius host, polling interval, and required customer password. The update interval applies to both Modbus and authenticated Web API polling. Minimum 5 seconds. Optionally restrict auto-enabled Modbus to this Home Assistant host IP.",
-                "data": {
-                    "host": "Host",
-                    "scan_interval": "Update interval (seconds)",
-                    "api_password": "Customer password",
-                    "restrict_modbus_to_this_ip": "Restrict Modbus to this IP"
-                }
-            }
-        },
-        "error": {
-            "cannot_connect": "Failed to connect",
-            "invalid_port": "Invalid port number",
-            "invalid_host": "Invalid host address",
-            "unsupported_hardware": "Unsupported hardware found. See error log for details.",
-            "unknown": "An unknown error occurred",
-            "scan_interval_too_short": "Scan interval is too short. Minimum 5 seconds.",
-            "modbus_address_conflict": "Modbus IDs are not unique",
-            "missing_api_password": "Customer password is required.",
-            "invalid_api_credentials": "Customer login failed. Check the customer password.",
-            "cannot_resolve_local_ip": "Could not determine this Home Assistant host IP for Modbus restriction."
-        }
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "invalid_port": "Invalid port number",
+      "invalid_host": "Invalid host address",
+      "unsupported_hardware": "Unsupported hardware. See logs for details.",
+      "unknown": "An unknown error occurred",
+      "scan_interval_too_short": "Minimum update interval is 5 seconds.",
+      "modbus_address_conflict": "Modbus IDs are not unique",
+      "missing_api_password": "Customer password is required.",
+      "invalid_api_credentials": "Customer login failed. Check the password.",
+      "cannot_resolve_local_ip": "Could not determine the Home Assistant IP for Modbus restriction."
     }
   }
+}

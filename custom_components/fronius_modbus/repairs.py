@@ -1,82 +1,60 @@
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from homeassistant.components.repairs import RepairsFlow
-from homeassistant.data_entry_flow import FlowResult
 
-from .config_flow import (
-    _build_schema,
-    _expand_user_input,
-    async_update_entry_from_input,
-    validate_input,
-    AddressesNotUnique,
-    CannotConnect,
-    CannotResolveLocalIp,
-    InvalidApiCredentials,
-    InvalidHost,
-    InvalidPort,
-    MissingApiPassword,
-    ScanIntervalTooShort,
-    UnsupportedHardware,
-)
 from .const import MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX
-
-_LOGGER = logging.getLogger(__name__)
-
-
-def _set_form_error(errors: dict[str, str], err: Exception) -> None:
-    if isinstance(err, CannotConnect):
-        errors["base"] = "cannot_connect"
-    elif isinstance(err, InvalidPort):
-        errors["base"] = "invalid_port"
-    elif isinstance(err, InvalidHost):
-        errors["host"] = "invalid_host"
-    elif isinstance(err, ScanIntervalTooShort):
-        errors["base"] = "scan_interval_too_short"
-    elif isinstance(err, MissingApiPassword):
-        errors["base"] = "missing_api_password"
-    elif isinstance(err, InvalidApiCredentials):
-        errors["base"] = "invalid_api_credentials"
-    elif isinstance(err, CannotResolveLocalIp):
-        errors["base"] = "cannot_resolve_local_ip"
-    elif isinstance(err, UnsupportedHardware):
-        errors["base"] = "unsupported_hardware"
-    elif isinstance(err, AddressesNotUnique):
-        errors["base"] = "modbus_address_conflict"
-    else:
-        _LOGGER.exception("Unexpected exception in repair flow")
-        errors["base"] = "unknown"
+from .flow_common import TokenFlowMixin, async_update_entry_from_input, entry_defaults
 
 
-class FroniusReconfigureRepairFlow(RepairsFlow):
+class FroniusReconfigureRepairFlow(TokenFlowMixin, RepairsFlow):
     """Repair flow that reuses the reconfigure fields and validation."""
 
     def __init__(self, entry_id: str) -> None:
         self._entry_id = entry_id
+        self._pending_flow_state = None
 
-    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def _async_finish_repair(
+        self,
+        settings,
+        info,
+        previous_host,
+    ):
+        del info
         entry = self.hass.config_entries.async_get_entry(self._entry_id)
         if entry is None:
             return self.async_abort(reason="entry_not_found")
 
-        errors: dict[str, str] = {}
-        defaults = _expand_user_input({}, {**entry.data, **entry.options})
+        await async_update_entry_from_input(
+            self.hass,
+            entry,
+            settings,
+            previous_host=previous_host,
+        )
+        return self.async_create_entry(title="", data={})
 
-        if user_input is not None:
-            try:
-                validated_input = _expand_user_input(user_input, defaults)
-                await validate_input(self.hass, validated_input)
-                await async_update_entry_from_input(self.hass, entry, validated_input)
-                return self.async_create_entry(title="", data={})
-            except Exception as err:  # pylint: disable=broad-except
-                _set_form_error(errors, err)
+    async def async_step_init(self, user_input: dict[str, Any] | None = None):
+        entry = self.hass.config_entries.async_get_entry(self._entry_id)
+        if entry is None:
+            return self.async_abort(reason="entry_not_found")
 
-        return self.async_show_form(
+        defaults = entry_defaults(entry)
+        return await self._async_handle_settings_step(
+            user_input=user_input,
             step_id="init",
-            data_schema=_build_schema(defaults),
-            errors=errors,
+            password_step_id="password",
+            defaults=defaults,
+            previous_host=defaults["host"],
+            on_success=self._async_finish_repair,
+        )
+
+    async def async_step_password(self, user_input: dict[str, Any] | None = None):
+        return await self._async_handle_password_step(
+            user_input=user_input,
+            step_id="password",
+            restart_step=self.async_step_init,
+            on_success=self._async_finish_repair,
         )
 
 

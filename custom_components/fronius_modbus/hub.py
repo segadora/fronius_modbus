@@ -4,25 +4,48 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import timedelta
-from typing import Optional, Any
+from typing import Any
 from importlib.metadata import version
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from packaging import version as pkg_version
 
-from homeassistant.core import HomeAssistant
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-
 from .froniusmodbusclient import FroniusModbusClient
-from .froniuswebclient import FroniusWebClient
+from .froniuswebclient import FroniusWebAuthError, FroniusWebClient
 
 from .const import (
     API_BATTERY_MODE,
     API_SOC_MODE,
     DOMAIN,
     ENTITY_PREFIX,
+    FIXED_API_USERNAME,
+    MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
 )
+from .token_store import async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)
+
+WEB_API_DATA_KEYS = (
+    "api_modbus_mode",
+    "api_modbus_control",
+    "api_modbus_sunspec_mode",
+    "api_modbus_restriction",
+    "api_modbus_restriction_ip",
+    "api_battery_mode_raw",
+    "api_battery_mode_effective_raw",
+    "api_battery_mode_consistent",
+    "api_battery_mode",
+    "api_battery_power",
+    "api_soc_mode_raw",
+    "api_soc_mode",
+    "api_soc_min",
+    "soc_maximum",
+    "api_backup_reserved",
+    "api_charge_from_ac",
+    "api_charge_from_grid",
+)
 
 
 class FroniusCoordinator(DataUpdateCoordinator):
@@ -118,6 +141,7 @@ class Hub:
         scan_interval: int,
         api_username: str | None = None,
         api_password: str | None = None,
+        api_token: dict[str, str] | None = None,
         auto_enable_modbus: bool = True,
         restrict_modbus_to_this_ip: bool = False,
     ) -> None:
@@ -138,8 +162,13 @@ class Hub:
         self.online = True
 
         self._client = FroniusModbusClient(host=host, port=port, inverter_unit_id=inverter_unit_id, meter_unit_ids=meter_unit_ids, timeout=max(3, (scan_interval - 1)))
-        if api_username and api_password:
-            self._webclient = FroniusWebClient(host=host, username=api_username, password=api_password)
+        if api_username and (api_password or api_token):
+            self._webclient = FroniusWebClient(
+                host=host,
+                username=api_username,
+                password=api_password or "",
+                token=api_token,
+            )
         self._scan_interval = timedelta(seconds=scan_interval)
         self.coordinator = None
         self._busy = False
@@ -170,7 +199,7 @@ class Hub:
         self._config_entry = config_entry
         await self._hass.async_add_executor_job(self.check_pymodbus_version)
         if self.web_api_configured and self._auto_enable_modbus:
-            enabled = await self._hass.async_add_executor_job(
+            enabled = await self._async_web_job(
                 self._webclient.ensure_modbus_enabled,
                 self._port,
                 self._meter_unit_ids[0] if self._meter_unit_ids else 200,
@@ -184,12 +213,13 @@ class Hub:
         if self.storage_configured:
             self._client.reset_storage_info()
             if self.web_api_configured:
-                storage_info = await self._hass.async_add_executor_job(self._webclient.get_storage_info)
-                self._client.set_storage_info(
-                    manufacturer=storage_info.get("manufacturer"),
-                    model=storage_info.get("model"),
-                    serial=storage_info.get("serial"),
-                )
+                storage_info = await self._async_web_job(self._webclient.get_storage_info)
+                if isinstance(storage_info, dict):
+                    self._client.set_storage_info(
+                        manufacturer=storage_info.get("manufacturer"),
+                        model=storage_info.get("model"),
+                        serial=storage_info.get("serial"),
+                    )
 
         if self.web_api_configured:
             await self.refresh_web_data()
@@ -209,6 +239,53 @@ class Hub:
         if not self._webclient:
             return False
         return await self._hass.async_add_executor_job(self._webclient.login)
+
+    def _clear_web_api_data(self) -> None:
+        for key in WEB_API_DATA_KEYS:
+            self.data[key] = None
+
+    async def _async_handle_web_api_auth_failure(self, err: Exception) -> None:
+        if not self._webclient:
+            return
+
+        _LOGGER.warning("Disabling Fronius web API for %s after auth failure: %s", self._host, err)
+        self._webclient = None
+        self._clear_web_api_data()
+        await async_get_token_store(self._hass).async_delete_token(self._host, FIXED_API_USERNAME)
+
+        if self._config_entry is not None:
+            ir.async_create_issue(
+                self._hass,
+                DOMAIN,
+                f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{self._config_entry.entry_id}",
+                is_fixable=True,
+                is_persistent=True,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="legacy_modbus_only_entry_reconfigure",
+                translation_placeholders={"entry_title": self._config_entry.title or self._name},
+                data={"entry_id": self._config_entry.entry_id},
+            )
+
+    async def _async_web_job(
+        self,
+        func,
+        *args,
+        raise_on_auth_failure: bool = False,
+    ):
+        if not self._webclient:
+            if raise_on_auth_failure:
+                raise RuntimeError("Fronius Web API is not configured")
+            return None
+
+        try:
+            return await self._hass.async_add_executor_job(func, *args)
+        except FroniusWebAuthError as err:
+            await self._async_handle_web_api_auth_failure(err)
+            if raise_on_auth_failure:
+                raise RuntimeError(
+                    "Fronius Web API authentication failed. Reconfigure the integration."
+                ) from err
+            return None
 
     def _apply_web_battery_config(self, battery_config: dict[str, Any]) -> None:
         raw_mode = self._as_int(battery_config.get('HYB_EM_MODE'))
@@ -254,11 +331,15 @@ class Hub:
         if not self._webclient:
             return
 
-        modbus_config = await self._hass.async_add_executor_job(self._webclient.get_modbus_config)
+        modbus_config = await self._async_web_job(self._webclient.get_modbus_config)
+        if not isinstance(modbus_config, dict):
+            return
         self._apply_web_modbus_config(modbus_config)
 
         if self.storage_configured:
-            battery_config = await self._hass.async_add_executor_job(self._webclient.get_battery_config)
+            battery_config = await self._async_web_job(self._webclient.get_battery_config)
+            if not isinstance(battery_config, dict):
+                return
             self._apply_web_battery_config(battery_config)
 
     def _get_next_soc_limits(
@@ -331,11 +412,12 @@ class Hub:
             soc_min=soc_min,
             soc_max=soc_max,
         )
-        await self._hass.async_add_executor_job(
+        await self._async_web_job(
             self._webclient.set_battery_soc_config,
             next_soc_min,
             next_soc_max,
             next_backup_reserved,
+            raise_on_auth_failure=True,
         )
         self.data['api_soc_mode_raw'] = 'manual'
         self.data['api_soc_mode'] = API_SOC_MODE['manual']
@@ -538,7 +620,12 @@ class Hub:
             power = 0
         if mode == 1 and power is not None:
             power = -power
-        await self._hass.async_add_executor_job(self._webclient.set_battery_config, mode, power if mode == 1 else None)
+        await self._async_web_job(
+            self._webclient.set_battery_config,
+            mode,
+            power if mode == 1 else None,
+            raise_on_auth_failure=True,
+        )
         await self.refresh_web_data()
 
     @toggle_busy
@@ -548,7 +635,12 @@ class Hub:
         self._require_api_battery_mode_manual('Target feed in')
 
         power = -int(round(value))
-        await self._hass.async_add_executor_job(self._webclient.set_battery_config, 1, power)
+        await self._async_web_job(
+            self._webclient.set_battery_config,
+            1,
+            power,
+            raise_on_auth_failure=True,
+        )
         await self.refresh_web_data()
 
     @toggle_busy
@@ -591,10 +683,11 @@ class Hub:
             if next_charge_from_grid and charge_from_ac is None:
                 next_charge_from_ac = True
 
-        await self._hass.async_add_executor_job(
+        await self._async_web_job(
             self._webclient.set_battery_charge_sources,
             next_charge_from_grid,
             next_charge_from_ac,
+            raise_on_auth_failure=True,
         )
         await self.refresh_web_data()
 

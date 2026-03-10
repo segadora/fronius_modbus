@@ -5,32 +5,31 @@ from __future__ import annotations
 import logging
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL, Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.const import Platform
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 
-from homeassistant.const import CONF_NAME, CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
+from . import hub
 from .const import (
-    DOMAIN,
-    CONF_INVERTER_UNIT_ID,
-    CONF_METER_UNIT_ID,
-    CONF_API_USERNAME,
     CONF_API_PASSWORD,
     CONF_AUTO_ENABLE_MODBUS,
-    CONF_RESTRICT_MODBUS_TO_THIS_IP,
+    CONF_INVERTER_UNIT_ID,
+    CONF_METER_UNIT_ID,
     CONF_RECONFIGURE_REQUIRED,
-    MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
+    CONF_RESTRICT_MODBUS_TO_THIS_IP,
     DEFAULT_AUTO_ENABLE_MODBUS,
-    DEFAULT_RESTRICT_MODBUS_TO_THIS_IP,
+    DEFAULT_INVERTER_UNIT_ID,
     DEFAULT_NAME,
     DEFAULT_PORT,
+    DEFAULT_RESTRICT_MODBUS_TO_THIS_IP,
     DEFAULT_SCAN_INTERVAL,
-    DEFAULT_INVERTER_UNIT_ID,
+    DOMAIN,
     FIXED_API_USERNAME,
+    MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
 )
-
-from . import hub
+from .froniuswebclient import mint_token
+from .token_store import async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -69,6 +68,7 @@ LEGACY_REPLACED_WEB_API_SENSOR_KEYS = (
     "api_charge_from_grid",
 )
 
+
 def _is_legacy_mppt_unique_id(unique_id: str) -> bool:
     return any(unique_id.endswith(f"_{key}") for key in LEGACY_MPPT_ENTITY_KEYS)
 
@@ -101,30 +101,57 @@ def _entry_value(entry: ConfigEntry, key: str, default=None):
     return entry.options.get(key, entry.data.get(key, default))
 
 
-def _migration_issue_id(entry: ConfigEntry) -> str:
-    return f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}"
-
-
 def _entry_has_key(entry: ConfigEntry, key: str) -> bool:
     return key in entry.options or key in entry.data
 
 
-def _entry_needs_reconfigure(entry: ConfigEntry) -> bool:
-    return bool(_entry_value(entry, CONF_RECONFIGURE_REQUIRED, False)) or not bool(
-        _entry_value(entry, CONF_API_PASSWORD, "")
-    )
+def _migration_issue_id(entry: ConfigEntry) -> str:
+    return f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}"
 
 
 def _legacy_modbus_only_entry(entry: ConfigEntry) -> bool:
     return any(
         not _entry_has_key(entry, key)
-        for key in (CONF_API_USERNAME, CONF_API_PASSWORD, CONF_AUTO_ENABLE_MODBUS)
+        for key in (CONF_AUTO_ENABLE_MODBUS, CONF_RESTRICT_MODBUS_TO_THIS_IP)
     )
 
 
-def _sync_reconfigure_issue(hass: HomeAssistant, entry: ConfigEntry) -> None:
+async def _async_update_entry_auth_state(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    *,
+    reconfigure_required: bool | None = None,
+) -> None:
+    new_data = dict(entry.data)
+    new_options = dict(entry.options)
+    changed = False
+
+    if new_data.pop(CONF_API_PASSWORD, None) is not None:
+        changed = True
+    if new_options.pop(CONF_API_PASSWORD, None) is not None:
+        changed = True
+
+    if reconfigure_required is not None:
+        if new_data.get(CONF_RECONFIGURE_REQUIRED) != reconfigure_required:
+            new_data[CONF_RECONFIGURE_REQUIRED] = reconfigure_required
+            changed = True
+        if new_options.get(CONF_RECONFIGURE_REQUIRED) != reconfigure_required:
+            new_options[CONF_RECONFIGURE_REQUIRED] = reconfigure_required
+            changed = True
+
+    if changed:
+        hass.config_entries.async_update_entry(entry, data=new_data, options=new_options)
+
+
+async def _async_sync_reconfigure_issue(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    *,
+    has_token: bool,
+) -> None:
     issue_id = _migration_issue_id(entry)
-    if _entry_needs_reconfigure(entry):
+    needs_reconfigure = bool(_entry_value(entry, CONF_RECONFIGURE_REQUIRED, False)) or not has_token
+    if needs_reconfigure:
         ir.async_create_issue(
             hass,
             DOMAIN,
@@ -143,6 +170,41 @@ def _sync_reconfigure_issue(hass: HomeAssistant, entry: ConfigEntry) -> None:
     ir.async_delete_issue(hass, DOMAIN, issue_id)
 
 
+async def _async_prepare_entry_token(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    host: str,
+) -> dict[str, str] | None:
+    token_store = async_get_token_store(hass)
+    token = await token_store.async_load_token(host, FIXED_API_USERNAME)
+    saved_password = str(_entry_value(entry, CONF_API_PASSWORD, "") or "").strip()
+
+    if token is None and saved_password:
+        try:
+            token = await hass.async_add_executor_job(
+                mint_token,
+                host,
+                FIXED_API_USERNAME,
+                saved_password,
+            )
+        except Exception as err:
+            _LOGGER.warning("Failed migrating saved Fronius password to token for %s: %s", host, err)
+        if token:
+            await token_store.async_save_token(
+                host,
+                realm=token["realm"],
+                token=token["token"],
+                user=FIXED_API_USERNAME,
+            )
+
+    await _async_update_entry_auth_state(
+        hass,
+        entry,
+        reconfigure_required=not bool(token),
+    )
+    return token
+
+
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate old config entries."""
     _LOGGER.debug(
@@ -156,11 +218,10 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.error("Unsupported config entry version: %s", entry.version)
         return False
 
-    if entry.version == 1 and entry.minor_version < 2:
+    if entry.version == 1 and entry.minor_version < 3:
         new_data = {**entry.data}
-        new_data[CONF_API_USERNAME] = FIXED_API_USERNAME
-        new_data.setdefault(CONF_API_PASSWORD, "")
         new_data.setdefault(CONF_AUTO_ENABLE_MODBUS, DEFAULT_AUTO_ENABLE_MODBUS)
+        new_data.setdefault(CONF_RESTRICT_MODBUS_TO_THIS_IP, DEFAULT_RESTRICT_MODBUS_TO_THIS_IP)
         if CONF_RECONFIGURE_REQUIRED not in new_data and CONF_RECONFIGURE_REQUIRED not in entry.options:
             new_data[CONF_RECONFIGURE_REQUIRED] = _legacy_modbus_only_entry(entry)
 
@@ -168,10 +229,12 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry,
             data=new_data,
             version=1,
-            minor_version=2,
+            minor_version=3,
         )
 
-    _sync_reconfigure_issue(hass, entry)
+    host = _entry_value(entry, CONF_HOST, "")
+    token = await _async_prepare_entry_token(hass, entry, host) if host else None
+    await _async_sync_reconfigure_issue(hass, entry, has_token=token is not None)
     return True
 
 
@@ -181,14 +244,11 @@ async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 async def async_setup_entry(hass: HomeAssistant, entry: HubConfigEntry) -> bool:
     """Set up Fronius Modbus from a config entry."""
-
     name = _entry_value(entry, CONF_NAME, DEFAULT_NAME)
     host = _entry_value(entry, CONF_HOST)
     port = _entry_value(entry, CONF_PORT, DEFAULT_PORT)
     inverter_unit_id = _entry_value(entry, CONF_INVERTER_UNIT_ID, DEFAULT_INVERTER_UNIT_ID)
     scan_interval = _entry_value(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
-    api_password = _entry_value(entry, CONF_API_PASSWORD)
-    api_username = FIXED_API_USERNAME if api_password else None
     auto_enable_modbus = _entry_value(
         entry,
         CONF_AUTO_ENABLE_MODBUS,
@@ -209,7 +269,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubConfigEntry) -> bool:
     _LOGGER.debug("Setup %s.%s", DOMAIN, name)
 
     await _async_remove_legacy_entities(hass, entry)
-    _sync_reconfigure_issue(hass, entry)
+    api_token = await _async_prepare_entry_token(hass, entry, host)
+    await _async_sync_reconfigure_issue(hass, entry, has_token=api_token is not None)
 
     entry.runtime_data = hub.Hub(
         hass=hass,
@@ -219,17 +280,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubConfigEntry) -> bool:
         inverter_unit_id=inverter_unit_id,
         meter_unit_ids=meter_unit_ids,
         scan_interval=scan_interval,
-        api_username=api_username,
-        api_password=api_password,
+        api_username=FIXED_API_USERNAME if api_token else None,
+        api_token=api_token,
         auto_enable_modbus=auto_enable_modbus,
         restrict_modbus_to_this_ip=restrict_modbus_to_this_ip,
     )
 
     await entry.runtime_data.init_data(config_entry=entry)
+    await _async_sync_reconfigure_issue(
+        hass,
+        entry,
+        has_token=entry.runtime_data.web_api_configured,
+    )
 
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
+
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
