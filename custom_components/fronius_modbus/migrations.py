@@ -324,6 +324,14 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             minor_version=5,
         )
 
+    if entry.version == 1 and entry.minor_version < 6:
+        await _async_remove_current_meter_entities(hass, entry)
+        hass.config_entries.async_update_entry(
+            entry,
+            version=1,
+            minor_version=6,
+        )
+
     host = _entry_value(entry, CONF_HOST, "")
     token = await async_prepare_entry_token(hass, entry, host) if host else None
     await async_sync_reconfigure_issue(hass, entry, has_token=token is not None)

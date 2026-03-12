@@ -597,9 +597,13 @@ class Hub:
     
     def get_device_info_meter(self, unit_id: int) -> dict:
         prefix = self._meter_prefix(unit_id)
+        try:
+            meter_position = self._meter_unit_ids.index(unit_id) + 1
+        except ValueError:
+            meter_position = 1
         return {
             "identifiers": {(DOMAIN, f'{self._name}_meter_{unit_id}')},
-            "name": f'Fronius {self._client.data.get(f"{prefix}model")} {self._client.data.get(f"{prefix}options")}',
+            "name": f'Fronius {self._client.data.get(f"{prefix}model")} {self._client.data.get(f"{prefix}options")} Meter {meter_position}',
             "manufacturer": self._client.data.get(f"{prefix}manufacturer"),
             "model": self._client.data.get(f"{prefix}model"),
             "serial_number": self._client.data.get(f"{prefix}serial"),
