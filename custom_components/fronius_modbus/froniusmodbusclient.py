@@ -753,23 +753,42 @@ class FroniusModbusClient(ExtModbusClient):
             self.data['storage_charge_module'] = storage_charge_module
             self.data['storage_discharge_module'] = storage_discharge_module
 
-            storage_charge_power = module_power.get(storage_charge_module)
-            storage_discharge_power = module_power.get(storage_discharge_module)
-            self.data['storage_charge_power'] = storage_charge_power
-            self.data['storage_discharge_power'] = storage_discharge_power
-            self.data['storage_charge_lfte'] = self.protect_lfte('storage_charge_lfte', module_lfte.get(storage_charge_module))
-            self.data['storage_discharge_lfte'] = self.protect_lfte('storage_discharge_lfte', module_lfte.get(storage_discharge_module))
-
-            if self.is_numeric(storage_charge_power) and self.is_numeric(storage_discharge_power):
-                self.data['storage_power'] = round(storage_discharge_power - storage_charge_power, 2)
-            else:
-                self.data['storage_power'] = None
+            self.data['storage_charge_current'] = module_current.get(storage_charge_module)
+            self.data['storage_charge_voltage'] = module_voltage.get(storage_charge_module)
+            self.data['storage_charge_power'] = module_power.get(storage_charge_module)
+            self.data['storage_charge_lfte'] = self.protect_lfte(
+                'storage_charge_lfte',
+                module_lfte.get(storage_charge_module),
+            )
+            self.data['storage_discharge_current'] = module_current.get(storage_discharge_module)
+            self.data['storage_discharge_voltage'] = module_voltage.get(storage_discharge_module)
+            self.data['storage_discharge_power'] = module_power.get(storage_discharge_module)
+            self.data['storage_discharge_lfte'] = self.protect_lfte(
+                'storage_discharge_lfte',
+                module_lfte.get(storage_discharge_module),
+            )
         elif self.storage_configured:
+            self.data['storage_charge_module'] = None
+            self.data['storage_discharge_module'] = None
+            self.data['storage_charge_current'] = None
+            self.data['storage_charge_voltage'] = None
             self.data['storage_charge_power'] = None
-            self.data['storage_discharge_power'] = None
             self.data['storage_charge_lfte'] = None
+            self.data['storage_discharge_current'] = None
+            self.data['storage_discharge_voltage'] = None
+            self.data['storage_discharge_power'] = None
             self.data['storage_discharge_lfte'] = None
-            self.data['storage_power'] = None
+        else:
+            self.data['storage_charge_module'] = None
+            self.data['storage_discharge_module'] = None
+            self.data['storage_charge_current'] = None
+            self.data['storage_charge_voltage'] = None
+            self.data['storage_charge_power'] = None
+            self.data['storage_charge_lfte'] = None
+            self.data['storage_discharge_current'] = None
+            self.data['storage_discharge_voltage'] = None
+            self.data['storage_discharge_power'] = None
+            self.data['storage_discharge_lfte'] = None
 
         pv_modules = []
         for module_id, label in module_labels.items():
@@ -781,6 +800,7 @@ class FroniusModbusClient(ExtModbusClient):
             else:
                 pv_modules = list(range(1, module_count + 1))
 
+        self.data['mppt_visible_module_ids'] = pv_modules
         pv_values = [module_power.get(module_id) for module_id in pv_modules if self.is_numeric(module_power.get(module_id))]
         self.data['pv_power'] = round(sum(pv_values), 2) if pv_values else None
 

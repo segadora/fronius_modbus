@@ -143,12 +143,15 @@ INVERTER_SYMO_SENSOR_TYPES = {
 }
 
 INVERTER_STORAGE_SENSOR_TYPES = {
+    'storage_charge_current': ['Storage charging current', 'storage_charge_current', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-dc', None],
+    'storage_charge_voltage': ['Storage charging voltage', 'storage_charge_voltage', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
     'storage_charge_power': ['Storage charging power', 'storage_charge_power', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:home-battery', None],
-    'storage_discharge_power': ['Storage discharging power', 'storage_discharge_power', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:home-battery', None],
-    'storage_connection': ['Storage connection', 'storage_connection', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'storage_power': ['Storage power', 'storage_power', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:home-battery', None],
     'storage_charge_lfte': ['Storage charging lifetime energy', 'storage_charge_lfte', SensorDeviceClass.ENERGY, SensorStateClass.TOTAL_INCREASING, 'Wh', 'mdi:home-battery', None],
+    'storage_discharge_current': ['Storage discharging current', 'storage_discharge_current', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-dc', None],
+    'storage_discharge_voltage': ['Storage discharging voltage', 'storage_discharge_voltage', SensorDeviceClass.VOLTAGE, SensorStateClass.MEASUREMENT, 'V', 'mdi:lightning-bolt', None],
+    'storage_discharge_power': ['Storage discharging power', 'storage_discharge_power', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:home-battery', None],
     'storage_discharge_lfte': ['Storage discharging lifetime energy', 'storage_discharge_lfte', SensorDeviceClass.ENERGY, SensorStateClass.TOTAL_INCREASING, 'Wh', 'mdi:home-battery', None],
+    'storage_connection': ['Storage connection', 'storage_connection', None, None, None, None, EntityCategory.DIAGNOSTIC],
 }
 
 

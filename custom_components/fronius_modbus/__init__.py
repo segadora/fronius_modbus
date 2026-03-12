@@ -27,6 +27,7 @@ from .const import (
     DOMAIN,
     API_USERNAME,
     MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
+    MPPT_MODULE_SENSOR_TYPES,
 )
 from .froniuswebclient import mint_token
 from .token_store import async_get_token_store
@@ -68,6 +69,18 @@ LEGACY_REPLACED_WEB_API_SENSOR_KEYS = (
     "api_charge_from_grid",
 )
 
+REPLACED_STORAGE_TELEMETRY_KEYS = (
+    "storage_power",
+    "storage_charging_dc_current",
+    "storage_charging_dc_voltage",
+    "storage_charging_dc_power",
+    "storage_charging_lifetime_energy",
+    "storage_discharging_dc_current",
+    "storage_discharging_dc_voltage",
+    "storage_discharging_dc_power",
+    "storage_discharging_lifetime_energy",
+)
+
 
 def _is_legacy_mppt_unique_id(unique_id: str) -> bool:
     return any(unique_id.endswith(f"_{key}") for key in LEGACY_MPPT_ENTITY_KEYS)
@@ -79,6 +92,10 @@ def _is_legacy_renamed_unique_id(unique_id: str) -> bool:
 
 def _is_legacy_replaced_web_api_sensor_unique_id(unique_id: str) -> bool:
     return any(unique_id.endswith(f"_{key}") for key in LEGACY_REPLACED_WEB_API_SENSOR_KEYS)
+
+
+def _is_replaced_storage_telemetry_unique_id(unique_id: str) -> bool:
+    return any(unique_id.endswith(f"_{key}") for key in REPLACED_STORAGE_TELEMETRY_KEYS)
 
 
 async def _async_remove_legacy_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -95,6 +112,44 @@ async def _async_remove_legacy_entities(hass: HomeAssistant, entry: ConfigEntry)
             removed += 1
     if removed:
         _LOGGER.info("Removed %s legacy entities", removed)
+
+
+def _duplicate_storage_mppt_unique_ids(runtime_data: hub.Hub) -> set[str]:
+    data = runtime_data.data if isinstance(runtime_data.data, dict) else {}
+    module_ids = set()
+    for key in ("storage_charge_module", "storage_discharge_module"):
+        module_id = data.get(key)
+        if isinstance(module_id, int) and module_id > 0:
+            module_ids.add(module_id)
+
+    if not module_ids:
+        return set()
+
+    return {
+        f"{runtime_data.entity_prefix}_mppt_module_{module_id - 1}_{sensor_info[1]}"
+        for module_id in module_ids
+        for sensor_info in MPPT_MODULE_SENSOR_TYPES
+    }
+
+
+async def _async_remove_replaced_storage_entities(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    runtime_data: hub.Hub,
+) -> None:
+    registry = er.async_get(hass)
+    duplicate_unique_ids = _duplicate_storage_mppt_unique_ids(runtime_data)
+    removed = 0
+    for entity_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+        unique_id = entity_entry.unique_id or ""
+        if (
+            _is_replaced_storage_telemetry_unique_id(unique_id)
+            or unique_id in duplicate_unique_ids
+        ):
+            registry.async_remove(entity_entry.entity_id)
+            removed += 1
+    if removed:
+        _LOGGER.info("Removed %s replaced storage telemetry entities", removed)
 
 
 def _entry_value(entry: ConfigEntry, key: str, default=None):
@@ -282,6 +337,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubConfigEntry) -> bool:
     )
 
     await entry.runtime_data.init_data(config_entry=entry)
+    await _async_remove_replaced_storage_entities(hass, entry, entry.runtime_data)
     await _async_sync_reconfigure_issue(
         hass,
         entry,

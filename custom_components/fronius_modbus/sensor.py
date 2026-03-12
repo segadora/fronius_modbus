@@ -81,7 +81,17 @@ async def async_setup_entry(
     if hub._client.mppt_configured:
         module_count = int(hub._client.mppt_module_count)
         data = coordinator.data if isinstance(coordinator.data, dict) else {}
-        for module_idx in range(module_count):
+        visible_module_ids = data.get('mppt_visible_module_ids')
+        if (
+            not isinstance(visible_module_ids, list)
+            or not all(isinstance(module_id, int) for module_id in visible_module_ids)
+        ):
+            visible_module_ids = list(range(1, module_count + 1))
+
+        for module_id in visible_module_ids:
+            if module_id < 1 or module_id > module_count:
+                continue
+            module_idx = module_id - 1
             for sensor_info in MPPT_MODULE_SENSOR_TYPES:
                 key = f'mppt_module_{module_idx}_{sensor_info[1]}'
                 if key not in data or data[key] is None:
