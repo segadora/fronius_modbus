@@ -170,6 +170,9 @@ class Hub:
             return result
         return wrapper
 
+    def _meter_prefix(self, unit_id: int) -> str:
+        return f"meter_{int(unit_id)}_"
+
     async def init_data(
         self,
         config_entry: ConfigEntry | None = None,
@@ -180,6 +183,11 @@ class Hub:
         self._config_entry = config_entry
         await self._hass.async_add_executor_job(self.check_pymodbus_version)
         if apply_modbus_config and self.web_api_configured and self._auto_enable_modbus:
+            if len(self._meter_unit_ids) > 1:
+                _LOGGER.info(
+                    "Applying Modbus web configuration for primary meter %s only; additional configured meters are not programmed via web API",
+                    self._meter_unit_ids[0],
+                )
             enabled = await self._async_web_job(
                 self._webclient.ensure_modbus_enabled,
                 self._port,
@@ -229,10 +237,10 @@ class Hub:
         if self._client.meter_configured:
             for meter_idx, meter_address in enumerate(self._client._meter_unit_ids, start=1):
                 await self._async_optional_poll(
-                    f"meter {meter_idx}",
+                    f"meter {meter_address}",
                     self._client.read_meter_data,
-                    meter_prefix=f"m{meter_idx}_",
                     unit_id=meter_address,
+                    is_primary=meter_idx == 1,
                 )
 
         if self._client.mppt_configured:
@@ -587,14 +595,15 @@ class Hub:
             "sw_version": self._client.data.get('i_sw_version'),
         }
     
-    def get_device_info_meter(self, id) -> dict:
-         return {
-            "identifiers": {(DOMAIN, f'{self._name}_meter{id}')},
-            "name": f'Fronius {self._client.data.get(f'm{id}_model')} {self._client.data.get(f'm{id}_options')}',
-            "manufacturer": self._client.data.get(f'm{id}_manufacturer'),
-            "model": self._client.data.get(f'm{id}_model'),
-            "serial_number": self._client.data.get(f'm{id}_serial'),
-            "sw_version": self._client.data.get(f'm{id}_sw_version'),
+    def get_device_info_meter(self, unit_id: int) -> dict:
+        prefix = self._meter_prefix(unit_id)
+        return {
+            "identifiers": {(DOMAIN, f'{self._name}_meter_{unit_id}')},
+            "name": f'Fronius {self._client.data.get(f"{prefix}model")} {self._client.data.get(f"{prefix}options")}',
+            "manufacturer": self._client.data.get(f"{prefix}manufacturer"),
+            "model": self._client.data.get(f"{prefix}model"),
+            "serial_number": self._client.data.get(f"{prefix}serial"),
+            "sw_version": self._client.data.get(f"{prefix}sw_version"),
         }
 
     @property

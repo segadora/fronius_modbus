@@ -24,6 +24,10 @@ from .base import FroniusModbusBaseEntity
 
 _LOGGER = logging.getLogger(__name__)
 
+
+def _meter_prefix(unit_id: int) -> str:
+    return f"meter_{int(unit_id)}_"
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: HubConfigEntry,
@@ -110,16 +114,16 @@ async def async_setup_entry(
                 entities.append(sensor)
 
     if hub.meter_configured:
-        for meter_idx, _ in enumerate(hub._client._meter_unit_ids, start=1):
-            meter_id = str(meter_idx)
-            if f'm{meter_id}_unit_id' not in hub.data:
+        for meter_unit_id in hub._client._meter_unit_ids:
+            prefix = _meter_prefix(meter_unit_id)
+            if f"{prefix}unit_id" not in hub.data:
                 continue
             for sensor_info in METER_SENSOR_TYPES.values():
                 sensor = FroniusModbusSensor(
                     coordinator=coordinator,
-                    device_info=hub.get_device_info_meter(meter_id),
-                    name=f'Meter {meter_id} ' + sensor_info[0],
-                    key=f'm{meter_id}_' + sensor_info[1],
+                    device_info=hub.get_device_info_meter(meter_unit_id),
+                    name=f'Meter {meter_unit_id} ' + sensor_info[0],
+                    key=f"{prefix}" + sensor_info[1],
                     device_class=sensor_info[2],
                     state_class=sensor_info[3],
                     unit=sensor_info[4],

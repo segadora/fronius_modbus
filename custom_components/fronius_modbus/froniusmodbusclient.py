@@ -120,6 +120,9 @@ class FroniusModbusClient(ExtModbusClient):
         if serial:
             self.data["s_serial"] = serial
 
+    def _meter_prefix(self, unit_id: int) -> str:
+        return f"meter_{int(unit_id)}_"
+
     def _map_value(self, values: dict, key: int, field_name: str):
         value = values.get(key)
         if value is None:
@@ -373,7 +376,10 @@ class FroniusModbusClient(ExtModbusClient):
         for i in range(len(self._meter_unit_ids)):
             unit_id = self._meter_unit_ids[i]
             try:
-                result = await self.read_device_info_data(prefix=f'm{i+1}_', unit_id=unit_id)
+                result = await self.read_device_info_data(
+                    prefix=self._meter_prefix(unit_id),
+                    unit_id=unit_id,
+                )
                 if result:
                     if not self.meter_configured:
                         self.meter_configured = True
@@ -909,8 +915,9 @@ class FroniusModbusClient(ExtModbusClient):
         return True
 
     @_safe_read("meter")
-    async def read_meter_data(self, meter_prefix, unit_id):
+    async def read_meter_data(self, unit_id, is_primary=False):
         """start reading meter data"""
+        meter_prefix = self._meter_prefix(unit_id)
         regs = await self.get_registers(unit_id=unit_id, address=METER_ADDRESS, count=103)
         if regs is None:
             return False
@@ -957,7 +964,7 @@ class FroniusModbusClient(ExtModbusClient):
         self.data[meter_prefix + "line_frequency"] = m_frequency
         self.data[meter_prefix + "power"] = acpower
 
-        if meter_prefix == 'm1_':
+        if is_primary:
             inverter_acpower = self.data.get('acpower')
             if not acpower is None and not inverter_acpower is None:
                 if self.is_numeric(acpower) and self.is_numeric(inverter_acpower):

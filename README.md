@@ -45,6 +45,10 @@ The Web API username is fixed to `customer`.
 The integration stores a derived digest token in Home Assistant storage and does not keep the password in the config entry.
 During setup, reconfigure, options, or Repairs, the password is only requested if no stored token exists for the selected host or the existing token must be refreshed.
 
+The setup UI accepts `Meter Modbus IDs` as a comma-separated list such as `200,201`.
+The first configured meter is the primary meter and is used for derived values like `Load` and `Grid status`.
+If Web API-assisted Modbus setup is used with multiple meters, only the primary meter ID is programmed through `/api/config/modbus`.
+
 ### Migrating Older Entries
 
 Entries created with older Modbus-only versions are migrated with safe defaults and keep working temporarily.

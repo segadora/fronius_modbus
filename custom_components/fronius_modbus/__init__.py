@@ -13,9 +13,11 @@ from .const import (
     API_USERNAME,
     CONF_INVERTER_UNIT_ID,
     CONF_METER_UNIT_ID,
+    CONF_METER_UNIT_IDS,
     CONF_RESTRICT_MODBUS_TO_THIS_IP,
     DEFAULT_INVERTER_UNIT_ID,
     DEFAULT_NAME,
+    DEFAULT_METER_UNIT_IDS,
     DEFAULT_PORT,
     DEFAULT_RESTRICT_MODBUS_TO_THIS_IP,
     DEFAULT_SCAN_INTERVAL,
@@ -31,6 +33,27 @@ type HubConfigEntry = ConfigEntry[hub.Hub]
 
 def _entry_value(entry: ConfigEntry, key: str, default=None):
     return entry.options.get(key, entry.data.get(key, default))
+
+
+def _entry_meter_unit_ids(entry: ConfigEntry) -> list[int]:
+    meter_unit_ids = _entry_value(entry, CONF_METER_UNIT_IDS)
+    if isinstance(meter_unit_ids, list):
+        normalized: list[int] = []
+        for unit_id in meter_unit_ids:
+            try:
+                unit_id_int = int(unit_id)
+            except (TypeError, ValueError):
+                continue
+            if unit_id_int > 0:
+                normalized.append(unit_id_int)
+        return normalized
+
+    meter_unit_id = _entry_value(entry, CONF_METER_UNIT_ID, DEFAULT_METER_UNIT_IDS[0])
+    try:
+        meter_unit_id = int(meter_unit_id)
+    except (TypeError, ValueError):
+        meter_unit_id = DEFAULT_METER_UNIT_IDS[0]
+    return [meter_unit_id] if meter_unit_id > 0 else []
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -55,8 +78,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubConfigEntry) -> bool:
         DEFAULT_RESTRICT_MODBUS_TO_THIS_IP,
     )
 
-    meter_unit_id = _entry_value(entry, CONF_METER_UNIT_ID)
-    meter_unit_ids = [meter_unit_id] if meter_unit_id and meter_unit_id > 0 else []
+    meter_unit_ids = _entry_meter_unit_ids(entry)
 
     _LOGGER.debug("Setup %s.%s", DOMAIN, name)
 

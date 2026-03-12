@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_NAME
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 
@@ -15,9 +17,12 @@ from .const import (
     API_USERNAME,
     CONF_API_PASSWORD,
     CONF_AUTO_ENABLE_MODBUS,
+    CONF_METER_UNIT_ID,
+    CONF_METER_UNIT_IDS,
     CONF_RECONFIGURE_REQUIRED,
     CONF_RESTRICT_MODBUS_TO_THIS_IP,
     DEFAULT_AUTO_ENABLE_MODBUS,
+    DEFAULT_METER_UNIT_IDS,
     DEFAULT_RESTRICT_MODBUS_TO_THIS_IP,
     DOMAIN,
     MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
@@ -26,6 +31,8 @@ from .froniuswebclient import mint_token
 from .token_store import async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)
+_LEGACY_POSITIONAL_METER_RE = re.compile(r".*_m\d+_.+")
+_LEGACY_POSITIONAL_METER_DEVICE_RE = re.compile(r".*_meter\d+")
 
 LEGACY_MPPT_ENTITY_KEYS = (
     "mppt1_current",
@@ -118,6 +125,39 @@ def _parse_current_mppt_unique_id(
     if separator == "" or not module_idx.isdigit():
         return None
     return int(module_idx) + 1
+
+
+def _entry_meter_unit_ids(entry: ConfigEntry) -> list[int]:
+    meter_unit_ids = _entry_value(entry, CONF_METER_UNIT_IDS)
+    if isinstance(meter_unit_ids, list):
+        normalized: list[int] = []
+        for unit_id in meter_unit_ids:
+            try:
+                unit_id_int = int(unit_id)
+            except (TypeError, ValueError):
+                continue
+            if unit_id_int > 0:
+                normalized.append(unit_id_int)
+        return normalized
+
+    meter_unit_id = _entry_value(entry, CONF_METER_UNIT_ID, DEFAULT_METER_UNIT_IDS[0])
+    try:
+        meter_unit_id = int(meter_unit_id)
+    except (TypeError, ValueError):
+        meter_unit_id = DEFAULT_METER_UNIT_IDS[0]
+    return [meter_unit_id] if meter_unit_id > 0 else []
+
+
+def _is_legacy_positional_meter_unique_id(unique_id: str) -> bool:
+    return bool(_LEGACY_POSITIONAL_METER_RE.fullmatch(unique_id))
+
+
+def _is_legacy_positional_meter_device(device) -> bool:
+    identifiers = getattr(device, "identifiers", set())
+    for identifier_domain, identifier in identifiers:
+        if identifier_domain == DOMAIN and _LEGACY_POSITIONAL_METER_DEVICE_RE.fullmatch(identifier):
+            return True
+    return False
 
 
 async def _async_update_entry_auth_state(
@@ -236,6 +276,22 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             minor_version=3,
         )
 
+    if entry.version == 1 and entry.minor_version < 4:
+        meter_unit_ids = _entry_meter_unit_ids(entry)
+        new_data = {**entry.data}
+        new_options = {**entry.options}
+        new_data[CONF_METER_UNIT_IDS] = meter_unit_ids
+        new_data.pop(CONF_METER_UNIT_ID, None)
+        new_options.pop(CONF_METER_UNIT_ID, None)
+
+        hass.config_entries.async_update_entry(
+            entry,
+            data=new_data,
+            options=new_options,
+            version=1,
+            minor_version=4,
+        )
+
     host = _entry_value(entry, CONF_HOST, "")
     token = await async_prepare_entry_token(hass, entry, host) if host else None
     await async_sync_reconfigure_issue(hass, entry, has_token=token is not None)
@@ -247,6 +303,7 @@ async def async_remove_legacy_entities(
     entry: ConfigEntry,
 ) -> None:
     registry = er.async_get(hass)
+    device_registry = dr.async_get(hass)
     removed = 0
     for entity_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
         unique_id = entity_entry.unique_id or ""
@@ -255,11 +312,21 @@ async def async_remove_legacy_entities(
             or _is_legacy_renamed_unique_id(unique_id)
             or _is_legacy_replaced_web_api_sensor_unique_id(unique_id)
             or _is_replaced_storage_telemetry_unique_id(unique_id)
+            or _is_legacy_positional_meter_unique_id(unique_id)
         ):
             registry.async_remove(entity_entry.entity_id)
             removed += 1
+
+    removed_devices = 0
+    for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id):
+        if _is_legacy_positional_meter_device(device):
+            device_registry.async_remove_device(device.id)
+            removed_devices += 1
+
     if removed:
         _LOGGER.info("Removed %s legacy/replaced entities", removed)
+    if removed_devices:
+        _LOGGER.info("Removed %s legacy positional meter devices", removed_devices)
 
 
 async def async_remove_unused_mppt_entities(

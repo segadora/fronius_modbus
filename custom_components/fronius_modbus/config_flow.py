@@ -17,11 +17,13 @@ from .const import (
     CONF_AUTO_ENABLE_MODBUS,
     CONF_INVERTER_UNIT_ID,
     CONF_METER_UNIT_ID,
+    CONF_METER_UNIT_IDS,
     CONF_RECONFIGURE_REQUIRED,
     CONF_RESTRICT_MODBUS_TO_THIS_IP,
     DEFAULT_AUTO_ENABLE_MODBUS,
     DEFAULT_INVERTER_UNIT_ID,
     DEFAULT_METER_UNIT_ID,
+    DEFAULT_METER_UNIT_IDS,
     DEFAULT_NAME,
     DEFAULT_PORT,
     DEFAULT_RESTRICT_MODBUS_TO_THIS_IP,
@@ -71,6 +73,10 @@ class _AddressesNotUnique(exceptions.HomeAssistantError):
     """Error to indicate that the modbus addresses are not unique."""
 
 
+class _InvalidMeterUnitIds(exceptions.HomeAssistantError):
+    """Error to indicate the meter IDs are invalid."""
+
+
 class _ScanIntervalTooShort(exceptions.HomeAssistantError):
     """Error to indicate the scan interval is too short."""
 
@@ -94,11 +100,54 @@ def _default_payload() -> dict[str, Any]:
         CONF_PORT: DEFAULT_PORT,
         CONF_INVERTER_UNIT_ID: DEFAULT_INVERTER_UNIT_ID,
         CONF_METER_UNIT_ID: DEFAULT_METER_UNIT_ID,
+        CONF_METER_UNIT_IDS: list(DEFAULT_METER_UNIT_IDS),
         CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
         CONF_API_USERNAME: API_USERNAME,
         CONF_AUTO_ENABLE_MODBUS: DEFAULT_AUTO_ENABLE_MODBUS,
         CONF_RESTRICT_MODBUS_TO_THIS_IP: DEFAULT_RESTRICT_MODBUS_TO_THIS_IP,
     }
+
+
+def _normalize_meter_unit_ids(value: Any) -> list[int]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        if value.strip() == "":
+            return []
+        items: list[Any] = [part.strip() for part in value.split(",")]
+    elif isinstance(value, (list, tuple)):
+        items = list(value)
+    else:
+        items = [value]
+
+    meter_ids: list[int] = []
+    for item in items:
+        if isinstance(item, str) and item.strip() == "":
+            raise _InvalidMeterUnitIds
+        try:
+            meter_id = int(item)
+        except (TypeError, ValueError) as err:
+            raise _InvalidMeterUnitIds from err
+        if meter_id <= 0:
+            raise _InvalidMeterUnitIds
+        meter_ids.append(meter_id)
+    return meter_ids
+
+
+def _payload_meter_unit_ids(payload: dict[str, Any]) -> list[int]:
+    if CONF_METER_UNIT_IDS in payload:
+        return _normalize_meter_unit_ids(payload.get(CONF_METER_UNIT_IDS))
+
+    meter_id = payload.get(CONF_METER_UNIT_ID, DEFAULT_METER_UNIT_ID)
+    try:
+        meter_id = int(meter_id)
+    except (TypeError, ValueError) as err:
+        raise _InvalidMeterUnitIds from err
+    return [meter_id] if meter_id > 0 else []
+
+
+def _meter_unit_ids_text(meter_unit_ids: list[int]) -> str:
+    return ",".join(str(unit_id) for unit_id in meter_unit_ids)
 
 
 def _expand_settings_input(
@@ -108,9 +157,16 @@ def _expand_settings_input(
     payload = _default_payload()
     if defaults:
         payload.update(defaults)
+    payload[CONF_METER_UNIT_IDS] = _payload_meter_unit_ids(defaults or payload)
     payload[CONF_HOST] = str(user_input.get(CONF_HOST, payload[CONF_HOST])).strip()
     payload[CONF_SCAN_INTERVAL] = int(
         user_input.get(CONF_SCAN_INTERVAL, payload[CONF_SCAN_INTERVAL])
+    )
+    payload[CONF_METER_UNIT_IDS] = _normalize_meter_unit_ids(
+        user_input.get(
+            CONF_METER_UNIT_IDS,
+            _meter_unit_ids_text(payload[CONF_METER_UNIT_IDS]),
+        )
     )
     payload[CONF_RESTRICT_MODBUS_TO_THIS_IP] = bool(
         user_input.get(
@@ -118,6 +174,7 @@ def _expand_settings_input(
             payload[CONF_RESTRICT_MODBUS_TO_THIS_IP],
         )
     )
+    payload.pop(CONF_METER_UNIT_ID, None)
     payload[CONF_API_USERNAME] = API_USERNAME
     payload.pop(CONF_API_PASSWORD, None)
     return payload
@@ -125,6 +182,7 @@ def _expand_settings_input(
 
 def _entry_payload(data: dict[str, Any], *, reconfigure_required: bool) -> dict[str, Any]:
     payload = dict(data)
+    payload.pop(CONF_METER_UNIT_ID, None)
     payload.pop(CONF_API_PASSWORD, None)
     payload[CONF_RECONFIGURE_REQUIRED] = reconfigure_required
     return payload
@@ -142,6 +200,12 @@ def _build_settings_schema(defaults: dict[str, Any]) -> vol.Schema:
                 CONF_SCAN_INTERVAL,
                 default=defaults.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
             ): vol.Coerce(int),
+            vol.Required(
+                CONF_METER_UNIT_IDS,
+                default=_meter_unit_ids_text(
+                    defaults.get(CONF_METER_UNIT_IDS, list(DEFAULT_METER_UNIT_IDS))
+                ),
+            ): str,
             vol.Required(
                 CONF_RESTRICT_MODBUS_TO_THIS_IP,
                 default=defaults.get(
@@ -173,6 +237,8 @@ def _set_form_error(errors: dict[str, str], err: Exception) -> None:
         errors["base"] = "invalid_port"
     elif isinstance(err, _InvalidHost):
         errors["host"] = "invalid_host"
+    elif isinstance(err, _InvalidMeterUnitIds):
+        errors[CONF_METER_UNIT_IDS] = "invalid_meter_unit_ids"
     elif isinstance(err, _ScanIntervalTooShort):
         errors["base"] = "scan_interval_too_short"
     elif isinstance(err, _MissingApiPassword):
@@ -197,9 +263,10 @@ def _validate_static_input(data: dict[str, Any]) -> None:
         raise _InvalidPort
     if data[CONF_SCAN_INTERVAL] < 5:
         raise _ScanIntervalTooShort
+    if len(data[CONF_METER_UNIT_IDS]) > 5:
+        raise _InvalidMeterUnitIds
 
-    meter_addresses = [data[CONF_METER_UNIT_ID]] if data[CONF_METER_UNIT_ID] > 0 else []
-    all_addresses = meter_addresses + [data[CONF_INVERTER_UNIT_ID]]
+    all_addresses = list(data[CONF_METER_UNIT_IDS]) + [data[CONF_INVERTER_UNIT_ID]]
     if len(all_addresses) > len(set(all_addresses)):
         _LOGGER.error("Modbus addresses are not unique %s", all_addresses)
         raise _AddressesNotUnique
@@ -217,8 +284,8 @@ def _should_apply_modbus_config(
         or settings[CONF_PORT] != previous_settings.get(CONF_PORT, DEFAULT_PORT)
         or settings[CONF_INVERTER_UNIT_ID]
         != previous_settings.get(CONF_INVERTER_UNIT_ID, DEFAULT_INVERTER_UNIT_ID)
-        or settings[CONF_METER_UNIT_ID]
-        != previous_settings.get(CONF_METER_UNIT_ID, DEFAULT_METER_UNIT_ID)
+        or settings[CONF_METER_UNIT_IDS]
+        != previous_settings.get(CONF_METER_UNIT_IDS, list(DEFAULT_METER_UNIT_IDS))
         or settings[CONF_RESTRICT_MODBUS_TO_THIS_IP]
         != previous_settings.get(
             CONF_RESTRICT_MODBUS_TO_THIS_IP,
@@ -283,15 +350,13 @@ async def _validate_input(
     if not api_password and api_token is None:
         raise _MissingApiPassword
 
-    meter_addresses = [data[CONF_METER_UNIT_ID]] if data[CONF_METER_UNIT_ID] > 0 else []
-
     hub = Hub(
         hass,
         data[CONF_NAME],
         data[CONF_HOST],
         data[CONF_PORT],
         data[CONF_INVERTER_UNIT_ID],
-        meter_addresses,
+        data[CONF_METER_UNIT_IDS],
         data[CONF_SCAN_INTERVAL],
         api_username=API_USERNAME,
         api_password=api_password or None,
@@ -348,6 +413,8 @@ async def async_update_entry_from_input(
     updated_payload = _entry_payload(validated_input, reconfigure_required=False)
     new_data = {**entry.data, **updated_payload}
     new_options = {**entry.options, **updated_payload}
+    new_data.pop(CONF_METER_UNIT_ID, None)
+    new_options.pop(CONF_METER_UNIT_ID, None)
     new_data.pop(CONF_API_PASSWORD, None)
     new_options.pop(CONF_API_PASSWORD, None)
     hass.config_entries.async_update_entry(
@@ -469,7 +536,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow."""
 
     VERSION = 1
-    MINOR_VERSION = 3
+    MINOR_VERSION = 4
     CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_POLL
 
     def __init__(self) -> None:

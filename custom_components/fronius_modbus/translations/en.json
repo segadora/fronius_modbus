@@ -4,10 +4,11 @@
     "step": {
       "user": {
         "title": "Set up Fronius System",
-        "description": "Enter the host, update interval, and Modbus IP restriction. Minimum interval: 5 seconds. If this host has no stored token, the next step asks for the customer password.",
+        "description": "Enter the host, update interval, meter IDs, and Modbus IP restriction. Meter IDs are comma-separated. Minimum interval: 5 seconds. If this host has no stored token, the next step asks for the customer password.",
         "data": {
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
+          "meter_modbus_unit_ids": "Meter Modbus IDs",
           "restrict_modbus_to_this_ip": "Restrict Modbus to this IP"
         }
       },
@@ -20,10 +21,11 @@
       },
       "reconfigure": {
         "title": "Review Fronius System",
-        "description": "Review the host, update interval, and Modbus IP restriction. Minimum interval: 5 seconds. If the stored token is missing or invalid, the next step asks for the customer password.",
+        "description": "Review the host, update interval, meter IDs, and Modbus IP restriction. Meter IDs are comma-separated. Minimum interval: 5 seconds. If the stored token is missing or invalid, the next step asks for the customer password.",
         "data": {
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
+          "meter_modbus_unit_ids": "Meter Modbus IDs",
           "restrict_modbus_to_this_ip": "Restrict Modbus to this IP"
         }
       },
@@ -42,6 +44,7 @@
       "cannot_connect": "Failed to connect",
       "invalid_port": "Invalid port number",
       "invalid_host": "Invalid host address",
+      "invalid_meter_unit_ids": "Enter meter IDs as comma-separated positive integers.",
       "unsupported_hardware": "Unsupported hardware. See logs for details.",
       "unknown": "An unknown error occurred",
       "scan_interval_too_short": "Minimum update interval is 5 seconds.",
@@ -58,10 +61,11 @@
         "step": {
           "init": {
             "title": "Review Fronius System",
-            "description": "The entry \"{entry_title}\" needs a valid customer token. Review the host, update interval, and Modbus IP restriction. The next step asks for the customer password only if a new token is needed.",
+            "description": "The entry \"{entry_title}\" needs a valid customer token. Review the host, update interval, meter IDs, and Modbus IP restriction. Meter IDs are comma-separated. The next step asks for the customer password only if a new token is needed.",
             "data": {
               "host": "Host",
               "scan_interval": "Update interval (seconds)",
+              "meter_modbus_unit_ids": "Meter Modbus IDs",
               "restrict_modbus_to_this_ip": "Restrict Modbus to this IP"
             }
           },
@@ -77,6 +81,7 @@
           "cannot_connect": "Failed to connect",
           "invalid_port": "Invalid port number",
           "invalid_host": "Invalid host address",
+          "invalid_meter_unit_ids": "Enter meter IDs as comma-separated positive integers.",
           "unsupported_hardware": "Unsupported hardware. See logs for details.",
           "unknown": "An unknown error occurred",
           "scan_interval_too_short": "Minimum update interval is 5 seconds.",
@@ -98,10 +103,11 @@
     "step": {
       "init": {
         "title": "Set up Fronius System",
-        "description": "Set the host, update interval, and Modbus IP restriction. Minimum interval: 5 seconds. If the stored token is missing or invalid, the next step asks for the customer password.",
+        "description": "Set the host, update interval, meter IDs, and Modbus IP restriction. Meter IDs are comma-separated. Minimum interval: 5 seconds. If the stored token is missing or invalid, the next step asks for the customer password.",
         "data": {
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
+          "meter_modbus_unit_ids": "Meter Modbus IDs",
           "restrict_modbus_to_this_ip": "Restrict Modbus to this IP"
         }
       },
@@ -117,6 +123,7 @@
       "cannot_connect": "Failed to connect",
       "invalid_port": "Invalid port number",
       "invalid_host": "Invalid host address",
+      "invalid_meter_unit_ids": "Enter meter IDs as comma-separated positive integers.",
       "unsupported_hardware": "Unsupported hardware. See logs for details.",
       "unknown": "An unknown error occurred",
       "scan_interval_too_short": "Minimum update interval is 5 seconds.",
