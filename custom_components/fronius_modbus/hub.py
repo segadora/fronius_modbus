@@ -597,10 +597,9 @@ class Hub:
     
     def get_device_info_meter(self, unit_id: int) -> dict:
         prefix = self._meter_prefix(unit_id)
-        meter_role = "Primary Meter" if self._meter_unit_ids and unit_id == self._meter_unit_ids[0] else "Meter"
         return {
             "identifiers": {(DOMAIN, f'{self._name}_meter_{unit_id}')},
-            "name": f'Fronius {self._client.data.get(f"{prefix}model")} {self._client.data.get(f"{prefix}options")} {meter_role} {unit_id}',
+            "name": f'Fronius {self._client.data.get(f"{prefix}model")} {self._client.data.get(f"{prefix}options")}',
             "manufacturer": self._client.data.get(f"{prefix}manufacturer"),
             "model": self._client.data.get(f"{prefix}model"),
             "serial_number": self._client.data.get(f"{prefix}serial"),
