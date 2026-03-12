@@ -603,7 +603,7 @@ class Hub:
             meter_position = 1
         return {
             "identifiers": {(DOMAIN, f'{self._name}_meter_{unit_id}')},
-            "name": f'Fronius {self._client.data.get(f"{prefix}model")} {self._client.data.get(f"{prefix}options")} Meter {meter_position}',
+            "name": f'Fronius {self._client.data.get(f"{prefix}model")} Meter {meter_position}',
             "manufacturer": self._client.data.get(f"{prefix}manufacturer"),
             "model": self._client.data.get(f"{prefix}model"),
             "serial_number": self._client.data.get(f"{prefix}serial"),
