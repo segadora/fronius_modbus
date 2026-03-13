@@ -1,4 +1,8 @@
-"""Migration helpers for Fronius Modbus."""
+"""Migration helpers for Fronius Modbus.
+
+This file only preserves the upgrade path from commit
+32cd901e5590d97aa4f77af52b4df5a7745d2bbd to the current integration layout.
+"""
 
 from __future__ import annotations
 
@@ -15,69 +19,26 @@ from homeassistant.helpers import issue_registry as ir
 from . import hub
 from .const import (
     API_USERNAME,
-    CONF_API_PASSWORD,
-    CONF_AUTO_ENABLE_MODBUS,
     CONF_METER_UNIT_ID,
     CONF_METER_UNIT_IDS,
     CONF_RECONFIGURE_REQUIRED,
-    CONF_RESTRICT_MODBUS_TO_THIS_IP,
-    DEFAULT_AUTO_ENABLE_MODBUS,
-    DEFAULT_RESTRICT_MODBUS_TO_THIS_IP,
     DOMAIN,
     MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
-    METER_SENSOR_TYPES,
 )
-from .froniuswebclient import mint_token
 from .token_store import async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)
-_LEGACY_POSITIONAL_METER_RE = re.compile(r".*_m\d+_.+")
-_LEGACY_POSITIONAL_METER_DEVICE_RE = re.compile(r".*_meter\d+")
-_CURRENT_STABLE_METER_RE = re.compile(
-    r".*_meter_\d+_(" + "|".join(re.escape(sensor_info[1]) for sensor_info in METER_SENSOR_TYPES.values()) + r")$"
-)
 
-LEGACY_MPPT_ENTITY_KEYS = (
-    "mppt1_current",
-    "mppt1_voltage",
-    "mppt1_power",
-    "mppt1_lfte",
-    "mppt2_current",
-    "mppt2_voltage",
-    "mppt2_power",
-    "mppt2_lfte",
-    "mppt3_current",
-    "mppt3_voltage",
-    "mppt3_pv_power",
-    "mppt3_pv_lfte",
-    "mppt3_power",
-    "mppt4_power",
-    "mppt3_lfte",
-    "mppt4_lfte",
-)
+_TARGET_VERSION = 1
+_TARGET_MINOR_VERSION = 8
 
-LEGACY_RENAMED_ENTITY_KEYS = (
+_LEGACY_METER_ENTITY_RE = re.compile(r".*_m\d+_.+")
+_LEGACY_METER_DEVICE_RE = re.compile(r".*_meter\d+")
+_LEGACY_ENTITY_SUFFIXES = (
     "export_limit_rate",
     "export_limit_enable",
     "minimum_reserve",
-    "api_soc_max",
-)
-
-LEGACY_REPLACED_WEB_API_SENSOR_KEYS = (
-    "api_charge_from_ac",
-    "api_charge_from_grid",
-)
-
-REPLACED_STORAGE_TELEMETRY_KEYS = (
     "storage_power",
-    "storage_charging_dc_current",
-    "storage_charging_dc_voltage",
-    "storage_charging_dc_power",
-    "storage_charging_lifetime_energy",
-    "storage_discharging_dc_current",
-    "storage_discharging_dc_voltage",
-    "storage_discharging_dc_power",
-    "storage_discharging_lifetime_energy",
 )
 
 
@@ -85,41 +46,25 @@ def _entry_value(entry: ConfigEntry, key: str, default=None):
     return entry.options.get(key, entry.data.get(key, default))
 
 
-def _entry_has_key(entry: ConfigEntry, key: str) -> bool:
-    return key in entry.options or key in entry.data
-
-
 def _migration_issue_id(entry: ConfigEntry) -> str:
     return f"{MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX}{entry.entry_id}"
 
 
-def _legacy_modbus_only_entry(entry: ConfigEntry) -> bool:
-    return any(
-        not _entry_has_key(entry, key)
-        for key in (CONF_AUTO_ENABLE_MODBUS, CONF_RESTRICT_MODBUS_TO_THIS_IP)
+def _legacy_entity_needs_removal(unique_id: str) -> bool:
+    return bool(_LEGACY_METER_ENTITY_RE.fullmatch(unique_id)) or any(
+        unique_id.endswith(f"_{suffix}") for suffix in _LEGACY_ENTITY_SUFFIXES
     )
 
 
-def _is_legacy_mppt_unique_id(unique_id: str) -> bool:
-    return any(unique_id.endswith(f"_{key}") for key in LEGACY_MPPT_ENTITY_KEYS)
+def _legacy_meter_device_needs_removal(device) -> bool:
+    identifiers = getattr(device, "identifiers", set())
+    return any(
+        identifier_domain == DOMAIN and _LEGACY_METER_DEVICE_RE.fullmatch(identifier)
+        for identifier_domain, identifier in identifiers
+    )
 
 
-def _is_legacy_renamed_unique_id(unique_id: str) -> bool:
-    return any(unique_id.endswith(f"_{key}") for key in LEGACY_RENAMED_ENTITY_KEYS)
-
-
-def _is_legacy_replaced_web_api_sensor_unique_id(unique_id: str) -> bool:
-    return any(unique_id.endswith(f"_{key}") for key in LEGACY_REPLACED_WEB_API_SENSOR_KEYS)
-
-
-def _is_replaced_storage_telemetry_unique_id(unique_id: str) -> bool:
-    return any(unique_id.endswith(f"_{key}") for key in REPLACED_STORAGE_TELEMETRY_KEYS)
-
-
-def _parse_current_mppt_unique_id(
-    unique_id: str,
-    entity_prefix: str,
-) -> int | None:
+def _parse_current_mppt_unique_id(unique_id: str, entity_prefix: str) -> int | None:
     prefix = f"{entity_prefix}_mppt_module_"
     if not unique_id.startswith(prefix):
         return None
@@ -130,63 +75,69 @@ def _parse_current_mppt_unique_id(
     return int(module_idx) + 1
 
 
-def _is_legacy_positional_meter_unique_id(unique_id: str) -> bool:
-    return bool(_LEGACY_POSITIONAL_METER_RE.fullmatch(unique_id))
-
-
-def _is_legacy_positional_meter_device(device) -> bool:
-    identifiers = getattr(device, "identifiers", set())
-    for identifier_domain, identifier in identifiers:
-        if identifier_domain == DOMAIN and _LEGACY_POSITIONAL_METER_DEVICE_RE.fullmatch(identifier):
-            return True
-    return False
-
-
-def _is_current_stable_meter_unique_id(unique_id: str) -> bool:
-    return bool(_CURRENT_STABLE_METER_RE.fullmatch(unique_id))
-
-
-async def _async_remove_current_meter_entities(
+async def _async_set_reconfigure_required(
     hass: HomeAssistant,
     entry: ConfigEntry,
-) -> None:
-    registry = er.async_get(hass)
-    removed = 0
-    for entity_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
-        unique_id = entity_entry.unique_id or ""
-        if _is_current_stable_meter_unique_id(unique_id):
-            registry.async_remove(entity_entry.entity_id)
-            removed += 1
-
-    if removed:
-        _LOGGER.info("Removed %s current meter entities for naming migration", removed)
-
-
-async def _async_update_entry_auth_state(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    *,
-    reconfigure_required: bool | None = None,
+    required: bool,
 ) -> None:
     new_data = dict(entry.data)
     new_options = dict(entry.options)
     changed = False
 
-    if new_data.pop(CONF_API_PASSWORD, None) is not None:
+    if new_data.get(CONF_RECONFIGURE_REQUIRED) != required:
+        new_data[CONF_RECONFIGURE_REQUIRED] = required
         changed = True
-    if new_options.pop(CONF_API_PASSWORD, None) is not None:
+    if new_options.get(CONF_RECONFIGURE_REQUIRED) != required:
+        new_options[CONF_RECONFIGURE_REQUIRED] = required
         changed = True
-
-    if reconfigure_required is not None:
-        if new_data.get(CONF_RECONFIGURE_REQUIRED) != reconfigure_required:
-            new_data[CONF_RECONFIGURE_REQUIRED] = reconfigure_required
-            changed = True
-        if new_options.get(CONF_RECONFIGURE_REQUIRED) != reconfigure_required:
-            new_options[CONF_RECONFIGURE_REQUIRED] = reconfigure_required
-            changed = True
 
     if changed:
         hass.config_entries.async_update_entry(entry, data=new_data, options=new_options)
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate old config entries from 32cd901 to the current shape."""
+    _LOGGER.debug(
+        "Migrating config entry %s version=%s minor=%s",
+        entry.entry_id,
+        entry.version,
+        entry.minor_version,
+    )
+
+    if entry.version > _TARGET_VERSION:
+        _LOGGER.error("Unsupported config entry version: %s", entry.version)
+        return False
+
+    if entry.version == _TARGET_VERSION and entry.minor_version < _TARGET_MINOR_VERSION:
+        new_data = dict(entry.data)
+        new_options = dict(entry.options)
+
+        new_data.pop(CONF_METER_UNIT_ID, None)
+        new_data.pop(CONF_METER_UNIT_IDS, None)
+        new_options.pop(CONF_METER_UNIT_ID, None)
+        new_options.pop(CONF_METER_UNIT_IDS, None)
+        new_data[CONF_RECONFIGURE_REQUIRED] = True
+        new_options[CONF_RECONFIGURE_REQUIRED] = True
+
+        hass.config_entries.async_update_entry(
+            entry,
+            data=new_data,
+            options=new_options,
+            version=_TARGET_VERSION,
+            minor_version=_TARGET_MINOR_VERSION,
+        )
+
+    return True
+
+
+async def async_prepare_entry_token(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    host: str,
+) -> dict[str, str] | None:
+    token = await async_get_token_store(hass).async_load_token(host, API_USERNAME)
+    await _async_set_reconfigure_required(hass, entry, not bool(token))
+    return token
 
 
 async def async_sync_reconfigure_issue(
@@ -216,157 +167,31 @@ async def async_sync_reconfigure_issue(
     ir.async_delete_issue(hass, DOMAIN, issue_id)
 
 
-async def async_prepare_entry_token(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    host: str,
-) -> dict[str, str] | None:
-    token_store = async_get_token_store(hass)
-    token = await token_store.async_load_token(host, API_USERNAME)
-    saved_password = str(_entry_value(entry, CONF_API_PASSWORD, "") or "").strip()
-
-    if token is None and saved_password:
-        try:
-            token = await hass.async_add_executor_job(
-                mint_token,
-                host,
-                API_USERNAME,
-                saved_password,
-            )
-        except Exception as err:
-            _LOGGER.warning("Failed migrating saved Fronius password to token for %s: %s", host, err)
-        if token:
-            await token_store.async_save_token(
-                host,
-                realm=token["realm"],
-                token=token["token"],
-                user=API_USERNAME,
-            )
-
-    await _async_update_entry_auth_state(
-        hass,
-        entry,
-        reconfigure_required=not bool(token),
-    )
-    return token
-
-
-async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate old config entries."""
-    _LOGGER.debug(
-        "Migrating config entry %s version=%s minor=%s",
-        entry.entry_id,
-        entry.version,
-        entry.minor_version,
-    )
-
-    if entry.version > 1:
-        _LOGGER.error("Unsupported config entry version: %s", entry.version)
-        return False
-
-    if entry.version == 1 and entry.minor_version < 3:
-        new_data = {**entry.data}
-        new_data.setdefault(CONF_AUTO_ENABLE_MODBUS, DEFAULT_AUTO_ENABLE_MODBUS)
-        new_data.setdefault(CONF_RESTRICT_MODBUS_TO_THIS_IP, DEFAULT_RESTRICT_MODBUS_TO_THIS_IP)
-        if CONF_RECONFIGURE_REQUIRED not in new_data and CONF_RECONFIGURE_REQUIRED not in entry.options:
-            new_data[CONF_RECONFIGURE_REQUIRED] = _legacy_modbus_only_entry(entry)
-
-        hass.config_entries.async_update_entry(
-            entry,
-            data=new_data,
-            version=1,
-            minor_version=3,
-        )
-
-    if entry.version == 1 and entry.minor_version < 4:
-        new_data = {**entry.data}
-        new_options = {**entry.options}
-        new_data.pop(CONF_METER_UNIT_ID, None)
-        new_data.pop(CONF_METER_UNIT_IDS, None)
-        new_options.pop(CONF_METER_UNIT_ID, None)
-        new_options.pop(CONF_METER_UNIT_IDS, None)
-        hass.config_entries.async_update_entry(
-            entry,
-            data=new_data,
-            options=new_options,
-            version=1,
-            minor_version=4,
-        )
-
-    if entry.version == 1 and entry.minor_version < 5:
-        await _async_remove_current_meter_entities(hass, entry)
-        hass.config_entries.async_update_entry(
-            entry,
-            version=1,
-            minor_version=5,
-        )
-
-    if entry.version == 1 and entry.minor_version < 6:
-        await _async_remove_current_meter_entities(hass, entry)
-        hass.config_entries.async_update_entry(
-            entry,
-            version=1,
-            minor_version=6,
-        )
-
-    if entry.version == 1 and entry.minor_version < 7:
-        await _async_remove_current_meter_entities(hass, entry)
-        hass.config_entries.async_update_entry(
-            entry,
-            version=1,
-            minor_version=7,
-        )
-
-    if entry.version == 1 and entry.minor_version < 8:
-        new_data = {**entry.data}
-        new_options = {**entry.options}
-        new_data.pop(CONF_METER_UNIT_ID, None)
-        new_data.pop(CONF_METER_UNIT_IDS, None)
-        new_options.pop(CONF_METER_UNIT_ID, None)
-        new_options.pop(CONF_METER_UNIT_IDS, None)
-        hass.config_entries.async_update_entry(
-            entry,
-            data=new_data,
-            options=new_options,
-            version=1,
-            minor_version=8,
-        )
-
-    host = _entry_value(entry, CONF_HOST, "")
-    token = await async_prepare_entry_token(hass, entry, host) if host else None
-    await async_sync_reconfigure_issue(hass, entry, has_token=token is not None)
-    return True
-
-
 async def async_remove_legacy_entities(
     hass: HomeAssistant,
     entry: ConfigEntry,
 ) -> None:
+    """Remove entity ids that only existed on 32cd901."""
     registry = er.async_get(hass)
     device_registry = dr.async_get(hass)
-    removed = 0
+
+    removed_entities = 0
     for entity_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
         unique_id = entity_entry.unique_id or ""
-        if (
-            _is_legacy_mppt_unique_id(unique_id)
-            or _is_legacy_renamed_unique_id(unique_id)
-            or _is_legacy_replaced_web_api_sensor_unique_id(unique_id)
-            or _is_replaced_storage_telemetry_unique_id(unique_id)
-            or _is_legacy_positional_meter_unique_id(unique_id)
-        ):
+        if _legacy_entity_needs_removal(unique_id):
             registry.async_remove(entity_entry.entity_id)
-            removed += 1
+            removed_entities += 1
 
     removed_devices = 0
     for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id):
-        if _is_legacy_positional_meter_device(device):
+        if _legacy_meter_device_needs_removal(device):
             device_registry.async_remove_device(device.id)
             removed_devices += 1
 
-    if removed:
-        _LOGGER.info("Removed %s legacy/replaced entities", removed)
+    if removed_entities:
+        _LOGGER.info("Removed %s legacy entities from pre-web-api config", removed_entities)
     if removed_devices:
-        _LOGGER.info("Removed %s legacy positional meter devices", removed_devices)
+        _LOGGER.info("Removed %s legacy meter devices from pre-web-api config", removed_devices)
 
 
 async def async_remove_unused_mppt_entities(
@@ -374,9 +199,11 @@ async def async_remove_unused_mppt_entities(
     entry: ConfigEntry,
     runtime_data: hub.Hub,
 ) -> None:
+    """Remove MPPT entities that are now intentionally hidden."""
     registry = er.async_get(hass)
     data = runtime_data.data if isinstance(runtime_data.data, dict) else {}
     visible_module_ids = data.get("mppt_visible_module_ids")
+
     if runtime_data._client.mppt_configured and (
         not isinstance(visible_module_ids, list)
         or not all(isinstance(module_id, int) and module_id > 0 for module_id in visible_module_ids)
