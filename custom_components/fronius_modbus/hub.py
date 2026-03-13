@@ -197,7 +197,12 @@ class Hub:
                 self._webclient.get_power_meter_info,
                 self._client.primary_meter_unit_id,
             )
-            if isinstance(meter_info, dict):
+            if meter_info is None:
+                _LOGGER.debug(
+                    "Keeping existing smart meter unit ids for %s because PowerMeter payload parsing failed",
+                    self._host,
+                )
+            elif isinstance(meter_info, dict):
                 self._client.set_meter_unit_ids(
                     meter_info.get("unit_ids"),
                     primary_unit_id=meter_info.get("primary_unit_id"),

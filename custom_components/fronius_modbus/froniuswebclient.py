@@ -58,23 +58,16 @@ def _digest_challenge(value: str) -> dict[str, str]:
 def _clean_text(value: Any) -> str | None:
     if value is None:
         return None
-    if isinstance(value, str):
-        cleaned = value.strip()
-        return cleaned or None
-    cleaned = str(value).strip()
+    cleaned = value.strip() if isinstance(value, str) else str(value).strip()
     return cleaned or None
 
 
 def _parse_json_object(value: Any) -> dict[str, Any]:
-    if not isinstance(value, str):
-        return {}
     try:
-        parsed = json.loads(value)
+        parsed = json.loads(value) if isinstance(value, str) else None
     except (TypeError, ValueError, json.JSONDecodeError):
         return {}
-    if not isinstance(parsed, dict):
-        return {}
-    return parsed
+    return parsed if isinstance(parsed, dict) else {}
 
 
 def _parse_storage_info(attributes: Any) -> dict[str, str | None]:
@@ -94,17 +87,30 @@ def _parse_storage_info(attributes: Any) -> dict[str, str | None]:
     }
 
 
+def _body_data(payload: Any, *path: str) -> tuple[dict[str, Any] | None, str | None]:
+    if not isinstance(payload, dict):
+        return None, None
+    node: Any = payload
+    for key in path:
+        node = node.get(key) if isinstance(node, dict) else None
+    return (node, ".".join(path)) if isinstance(node, dict) else (None, None)
+
+
 def _parse_power_meter_info(
     payload: Any,
     meter_address_offset: int,
-) -> dict[str, Any]:
+) -> dict[str, Any] | None:
+    nodes, payload_shape = _body_data(payload, "Body", "Data")
+    if nodes is None:
+        nodes, payload_shape = _body_data(payload, "meter", "Body", "Data")
+    if nodes is None:
+        return None
+
     result: dict[str, Any] = {
         "unit_ids": [],
         "primary_unit_id": None,
+        "payload_shape": payload_shape,
     }
-    nodes = ((((payload or {}).get("meter") or {}).get("Body") or {}).get("Data") or {})
-    if not isinstance(nodes, dict):
-        return result
 
     meters: list[dict[str, Any]] = []
     for node in nodes.values():
@@ -298,15 +304,12 @@ def login(
     token: dict[str, str] | None = None,
     timeout: float = 4.0,
 ) -> bool:
-    response, _ = _login_response(host, user, password=password, token=token, timeout=timeout)
-    return response.status_code == 200
+    return _login_response(host, user, password=password, token=token, timeout=timeout)[0].status_code == 200
 
 
 def mint_token(host: str, user: str, password: str, timeout: float = 4.0) -> dict[str, str] | None:
     response, auth = _login_response(host, user, password=password, timeout=timeout)
-    if response.status_code != 200:
-        return None
-    return auth.saved_token
+    return auth.saved_token if response.status_code == 200 else None
 
 
 class FroniusWebClient:
@@ -324,15 +327,17 @@ class FroniusWebClient:
         self._username = API_USERNAME
         self._password = password
         self._timeout = timeout
-        self._auth = XHeaderDigestAuth(self._username, password=password, token=token, timeout=self._timeout)
-
-    def _url(self, path: str) -> str:
-        return f"http://{self._host}{path}"
+        self._auth = XHeaderDigestAuth(
+            self._username,
+            password=password,
+            token=token,
+            timeout=self._timeout,
+        )
 
     def _request(self, method: str, path: str, payload: dict | None = None) -> requests.Response:
         response = requests.request(
             method,
-            self._url(path),
+            f"http://{self._host}{path}",
             auth=self._auth,
             json=payload,
             timeout=self._timeout,
@@ -341,6 +346,12 @@ class FroniusWebClient:
             raise FroniusWebAuthError(f"Fronius Web API auth failed with status {response.status_code}")
         response.raise_for_status()
         return response
+
+    def _get_json(self, path: str) -> dict[str, Any]:
+        return self._request("get", path).json()
+
+    def _post_ok(self, path: str, payload: dict[str, Any]) -> bool:
+        return self._request("post", path, payload=payload).ok
 
     def issued_token(self) -> dict[str, str] | None:
         return self._auth.saved_token
@@ -367,14 +378,17 @@ class FroniusWebClient:
         )
 
     def get_modbus_config(self) -> dict[str, Any]:
-        return self._request("get", "/api/config/modbus").json()
+        return self._get_json("/api/config/modbus")
 
     def get_storage_info(self) -> dict[str, str | None]:
         try:
-            data = self._request("get", "/api/components/BatteryManagementSystem/readable").json()
-            nodes = ((data.get("Body") or {}).get("Data") or {})
+            nodes, _ = _body_data(
+                self._get_json("/api/components/BatteryManagementSystem/readable"),
+                "Body",
+                "Data",
+            )
             device = next(iter(nodes.values()), {}) if isinstance(nodes, dict) else {}
-            attributes = device.get("attributes") if isinstance(device, dict) else {}
+            attributes = device.get("attributes") if isinstance(device, dict) else None
             return _parse_storage_info(attributes)
         except FroniusWebAuthError:
             raise
@@ -384,8 +398,25 @@ class FroniusWebClient:
 
     def get_power_meter_info(self, meter_address_offset: int = 200) -> dict[str, Any] | None:
         try:
-            data = self._request("get", "/api/components/PowerMeter/readable").json()
-            return _parse_power_meter_info(data, meter_address_offset)
+            data = self._get_json("/api/components/PowerMeter/readable")
+            meter_info = _parse_power_meter_info(data, meter_address_offset)
+            if meter_info is None:
+                top_level_keys = list(data.keys()) if isinstance(data, dict) else []
+                _LOGGER.debug(
+                    "Unrecognized PowerMeter payload shape from %s: top-level keys=%s",
+                    self._host,
+                    top_level_keys,
+                )
+                return None
+
+            _LOGGER.debug(
+                "Parsed PowerMeter payload from %s via %s: unit_ids=%s primary_unit_id=%s",
+                self._host,
+                meter_info.get("payload_shape"),
+                meter_info.get("unit_ids"),
+                meter_info.get("primary_unit_id"),
+            )
+            return meter_info
         except FroniusWebAuthError:
             raise
         except Exception as err:
@@ -417,10 +448,6 @@ class FroniusWebClient:
         ):
             return False
 
-        restriction_payload: dict[str, Any] = {"on": restriction_on}
-        if restriction_ip:
-            restriction_payload["ip"] = restriction_ip
-
         payload = {
             **MASTER_RTUIF,
             "slave": {
@@ -430,7 +457,10 @@ class FroniusWebClient:
                 "sunspecMode": "int",
                 "meterAddress": meter_address,
                 "rtu_inverter_slave_id": inverter_unit_id,
-                "ctr": {"on": True, "restriction": restriction_payload},
+                "ctr": {
+                    "on": True,
+                    "restriction": {"on": restriction_on, **({"ip": restriction_ip} if restriction_ip else {})},
+                },
             },
         }
         self._request("post", "/api/config/modbus", payload=payload)
@@ -446,7 +476,7 @@ class FroniusWebClient:
         return True
 
     def get_battery_config(self) -> dict[str, Any]:
-        return self._request("get", "/api/config/batteries").json()
+        return self._get_json("/api/config/batteries")
 
     def set_battery_config(
         self,
@@ -466,7 +496,7 @@ class FroniusWebClient:
             payload["BAT_M0_SOC_MAX"] = 100
         if power is not None:
             payload["HYB_EM_POWER"] = power
-        return self._request("post", "/api/config/batteries", payload=payload).ok
+        return self._post_ok("/api/config/batteries", payload)
 
     def set_battery_soc_config(
         self,
@@ -480,11 +510,11 @@ class FroniusWebClient:
             "BAT_M0_SOC_MAX": soc_max,
             "HYB_BACKUP_RESERVED": backup_reserved,
         }
-        return self._request("post", "/api/config/batteries", payload=payload).ok
+        return self._post_ok("/api/config/batteries", payload)
 
     def set_battery_charge_sources(self, charge_from_grid: bool, charge_from_ac: bool) -> bool:
         payload = {
             "HYB_EVU_CHARGEFROMGRID": bool(charge_from_grid),
             "HYB_BM_CHARGEFROMAC": bool(charge_from_ac),
         }
-        return self._request("post", "/api/config/batteries", payload=payload).ok
+        return self._post_ok("/api/config/batteries", payload)
