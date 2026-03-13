@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Set up Fronius System",
-        "description": "Enter the host, update interval, and Modbus IP restriction. Smart meters are auto-discovered from Modbus address offset 200. Minimum interval: 5 seconds. If this host has no stored token, the next step asks for the customer password.",
+        "description": "Enter the host, update interval, and Modbus IP restriction. Minimum interval: 5 seconds. If no stored token exists for this host, the next step asks for the customer password.",
         "data": {
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
@@ -20,7 +20,7 @@
       },
       "reconfigure": {
         "title": "Review Fronius System",
-        "description": "Review the host, update interval, and Modbus IP restriction. Smart meters are auto-discovered from Modbus address offset 200. Minimum interval: 5 seconds. If the stored token is missing or invalid, the next step asks for the customer password.",
+        "description": "Review the host, update interval, and Modbus IP restriction. Minimum interval: 5 seconds. If the stored token is missing or invalid, the next step asks for the customer password.",
         "data": {
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
@@ -42,13 +42,13 @@
       "cannot_connect": "Failed to connect",
       "invalid_port": "Invalid port number",
       "invalid_host": "Invalid host address",
-      "unsupported_hardware": "Unsupported hardware. See logs for details.",
-      "unknown": "An unknown error occurred",
+      "unsupported_hardware": "Unsupported hardware. See logs.",
+      "unknown": "Unknown error",
       "scan_interval_too_short": "Minimum update interval is 5 seconds.",
       "modbus_address_conflict": "Modbus IDs are not unique",
       "missing_api_password": "Customer password is required.",
-      "invalid_api_credentials": "Customer login failed. Check the password.",
-      "cannot_resolve_local_ip": "Could not determine the Home Assistant IP for Modbus restriction."
+      "invalid_api_credentials": "Customer login failed.",
+      "cannot_resolve_local_ip": "Could not determine the Home Assistant IP."
     }
   },
   "issues": {
@@ -58,7 +58,7 @@
         "step": {
           "init": {
             "title": "Review Fronius System",
-            "description": "The entry \"{entry_title}\" needs a valid customer token. Review the host, update interval, and Modbus IP restriction. Smart meters are auto-discovered from Modbus address offset 200. The next step asks for the customer password only if a new token is needed.",
+            "description": "The entry \"{entry_title}\" needs a valid customer token. Review the host, update interval, and Modbus IP restriction. The next step asks for the customer password only if needed.",
             "data": {
               "host": "Host",
               "scan_interval": "Update interval (seconds)",
@@ -77,13 +77,13 @@
           "cannot_connect": "Failed to connect",
           "invalid_port": "Invalid port number",
           "invalid_host": "Invalid host address",
-          "unsupported_hardware": "Unsupported hardware. See logs for details.",
-          "unknown": "An unknown error occurred",
+          "unsupported_hardware": "Unsupported hardware. See logs.",
+          "unknown": "Unknown error",
           "scan_interval_too_short": "Minimum update interval is 5 seconds.",
           "modbus_address_conflict": "Modbus IDs are not unique",
           "missing_api_password": "Customer password is required.",
-          "invalid_api_credentials": "Customer login failed. Check the password.",
-          "cannot_resolve_local_ip": "Could not determine the Home Assistant IP for Modbus restriction."
+          "invalid_api_credentials": "Customer login failed.",
+          "cannot_resolve_local_ip": "Could not determine the Home Assistant IP."
         },
         "abort": {
           "entry_not_found": "The Fronius entry no longer exists."
@@ -98,7 +98,7 @@
     "step": {
       "init": {
         "title": "Set up Fronius System",
-        "description": "Set the host, update interval, and Modbus IP restriction. Smart meters are auto-discovered from Modbus address offset 200. Minimum interval: 5 seconds. If the stored token is missing or invalid, the next step asks for the customer password.",
+        "description": "Set the host, update interval, and Modbus IP restriction. Minimum interval: 5 seconds. If the stored token is missing or invalid, the next step asks for the customer password.",
         "data": {
           "host": "Host",
           "scan_interval": "Update interval (seconds)",
@@ -117,13 +117,13 @@
       "cannot_connect": "Failed to connect",
       "invalid_port": "Invalid port number",
       "invalid_host": "Invalid host address",
-      "unsupported_hardware": "Unsupported hardware. See logs for details.",
-      "unknown": "An unknown error occurred",
+      "unsupported_hardware": "Unsupported hardware. See logs.",
+      "unknown": "Unknown error",
       "scan_interval_too_short": "Minimum update interval is 5 seconds.",
       "modbus_address_conflict": "Modbus IDs are not unique",
       "missing_api_password": "Customer password is required.",
-      "invalid_api_credentials": "Customer login failed. Check the password.",
-      "cannot_resolve_local_ip": "Could not determine the Home Assistant IP for Modbus restriction."
+      "invalid_api_credentials": "Customer login failed.",
+      "cannot_resolve_local_ip": "Could not determine the Home Assistant IP."
     }
   }
 }

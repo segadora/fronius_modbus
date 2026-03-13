@@ -41,8 +41,6 @@ from .froniusmodbusclient_const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-METER_DISCOVERY_WINDOW_SIZE = 14
-
 
 def _safe_read(label: str):
     def decorator(func):
@@ -81,6 +79,7 @@ class FroniusModbusClient(ExtModbusClient):
         self._inverter_unit_id = inverter_unit_id
         self._meter_address_offset = int(meter_unit_ids[0]) if meter_unit_ids else 200
         self._meter_unit_ids = [self._meter_address_offset]
+        self._primary_meter_unit_id = self._meter_address_offset
 
         self.meter_configured = False
         self.mppt_configured = False
@@ -128,37 +127,35 @@ class FroniusModbusClient(ExtModbusClient):
 
     @property
     def primary_meter_unit_id(self) -> int:
-        return self._meter_address_offset
+        return self._primary_meter_unit_id
 
-    async def _discover_meter_unit_ids(self) -> list[int]:
-        discovered: list[int] = []
+    def set_meter_unit_ids(
+        self,
+        unit_ids: list[int] | tuple[int, ...] | None,
+        primary_unit_id: int | None = None,
+    ) -> None:
+        normalized: list[int] = []
+        seen: set[int] = set()
+        for unit_id in unit_ids or []:
+            if not self.is_numeric(unit_id):
+                continue
+            normalized_unit_id = int(unit_id)
+            if normalized_unit_id <= 0 or normalized_unit_id in seen:
+                continue
+            seen.add(normalized_unit_id)
+            normalized.append(normalized_unit_id)
 
-        for unit_id in range(
-            self._meter_address_offset,
-            self._meter_address_offset + METER_DISCOVERY_WINDOW_SIZE,
+        self._meter_unit_ids = normalized
+        if (
+            primary_unit_id is not None
+            and self.is_numeric(primary_unit_id)
+            and int(primary_unit_id) in seen
         ):
-            prefix = self._meter_prefix(unit_id)
-            try:
-                result = await self.read_device_info_data(prefix=prefix, unit_id=unit_id)
-            except Exception:
-                _LOGGER.debug(
-                    "Meter discovery probe failed for unit %s on %s:%s",
-                    unit_id,
-                    self._host,
-                    self._port,
-                    exc_info=True,
-                )
-                continue
-
-            if not result:
-                continue
-
-            manufacturer = str(self.data.get(prefix + "manufacturer") or "").strip()
-            model = str(self.data.get(prefix + "model") or "").strip()
-            if manufacturer == "Fronius" and "meter" in model.lower():
-                discovered.append(unit_id)
-
-        return discovered
+            self._primary_meter_unit_id = int(primary_unit_id)
+        elif normalized:
+            self._primary_meter_unit_id = normalized[0]
+        else:
+            self._primary_meter_unit_id = self._meter_address_offset
 
     def _map_value(self, values: dict, key: int, field_name: str):
         value = values.get(key)
@@ -406,23 +403,35 @@ class FroniusModbusClient(ExtModbusClient):
         except Exception as e:
             _LOGGER.warning(f"Error while checking mppt data {e}")
 
-        try:
-            self._meter_unit_ids = await self._discover_meter_unit_ids()
-            self.meter_configured = bool(self._meter_unit_ids)
-        except Exception:
-            _LOGGER.error(
-                "Error discovering meter info %s:%s offset unit id: %s",
-                self._host,
-                self._port,
-                self._meter_address_offset,
-                exc_info=True,
-            )
-            self._meter_unit_ids = []
-            self.meter_configured = False
+        discovered_meter_unit_ids: list[int] = []
+        for unit_id in self._meter_unit_ids:
+            prefix = self._meter_prefix(unit_id)
+            try:
+                result = await self.read_device_info_data(prefix=prefix, unit_id=unit_id)
+            except Exception:
+                _LOGGER.debug(
+                    "Meter info probe failed for configured unit %s on %s:%s",
+                    unit_id,
+                    self._host,
+                    self._port,
+                    exc_info=True,
+                )
+                continue
+
+            if not result:
+                continue
+
+            manufacturer = str(self.data.get(prefix + "manufacturer") or "").strip()
+            model = str(self.data.get(prefix + "model") or "").strip()
+            if manufacturer == "Fronius" and "meter" in model.lower():
+                discovered_meter_unit_ids.append(unit_id)
+
+        self._meter_unit_ids = discovered_meter_unit_ids
+        self.meter_configured = bool(self._meter_unit_ids)
 
         if self.meter_configured:
             _LOGGER.info(
-                "Discovered Fronius smart meter unit ids on %s:%s: %s",
+                "Configured Fronius smart meter unit ids on %s:%s: %s",
                 self._host,
                 self._port,
                 self._meter_unit_ids,

@@ -94,6 +94,69 @@ def _parse_storage_info(attributes: Any) -> dict[str, str | None]:
     }
 
 
+def _parse_power_meter_info(
+    payload: Any,
+    meter_address_offset: int,
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "unit_ids": [],
+        "primary_unit_id": None,
+    }
+    nodes = ((((payload or {}).get("meter") or {}).get("Body") or {}).get("Data") or {})
+    if not isinstance(nodes, dict):
+        return result
+
+    meters: list[dict[str, Any]] = []
+    for node in nodes.values():
+        if not isinstance(node, dict):
+            continue
+        attributes = node.get("attributes")
+        if not isinstance(attributes, dict):
+            continue
+
+        manufacturer = _clean_text(attributes.get("manufacturer"))
+        model = _clean_text(attributes.get("model"))
+        try:
+            rtu_addr = int(str(attributes.get("addr", "")).strip())
+        except (TypeError, ValueError):
+            continue
+
+        if rtu_addr <= 0:
+            continue
+        if manufacturer != "Fronius" or not model or "meter" not in model.lower():
+            continue
+
+        label = (_clean_text(attributes.get("label")) or "").lower()
+        location = _clean_text(attributes.get("meter-location"))
+        meters.append(
+            {
+                "unit_id": int(meter_address_offset) + rtu_addr - 1,
+                "rtu_addr": rtu_addr,
+                "is_primary": label == "<primary>" or location == "0",
+            }
+        )
+
+    if not meters:
+        return result
+
+    meters.sort(key=lambda meter: (not meter["is_primary"], meter["rtu_addr"], meter["unit_id"]))
+    seen: set[int] = set()
+    unit_ids: list[int] = []
+    for meter in meters:
+        unit_id = meter["unit_id"]
+        if unit_id in seen:
+            continue
+        seen.add(unit_id)
+        unit_ids.append(unit_id)
+        if result["primary_unit_id"] is None and meter["is_primary"]:
+            result["primary_unit_id"] = unit_id
+
+    result["unit_ids"] = unit_ids
+    if result["primary_unit_id"] is None and unit_ids:
+        result["primary_unit_id"] = unit_ids[0]
+    return result
+
+
 @lru_cache(maxsize=None)
 def _hash_mode(base_url: str, user: str, timeout: float) -> str:
     try:
@@ -318,6 +381,16 @@ class FroniusWebClient:
         except Exception as err:
             _LOGGER.warning("Failed reading storage identity via web API from %s: %s", self._host, err)
         return _parse_storage_info(None)
+
+    def get_power_meter_info(self, meter_address_offset: int = 200) -> dict[str, Any] | None:
+        try:
+            data = self._request("get", "/api/components/PowerMeter/readable").json()
+            return _parse_power_meter_info(data, meter_address_offset)
+        except FroniusWebAuthError:
+            raise
+        except Exception as err:
+            _LOGGER.warning("Failed reading power meter config via web API from %s: %s", self._host, err)
+        return None
 
     def ensure_modbus_enabled(
         self,

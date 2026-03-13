@@ -192,10 +192,20 @@ class Hub:
             )
             if enabled:
                 await asyncio.sleep(1.0)
+        if self.web_api_configured:
+            meter_info = await self._async_web_job(
+                self._webclient.get_power_meter_info,
+                self._client.primary_meter_unit_id,
+            )
+            if isinstance(meter_info, dict):
+                self._client.set_meter_unit_ids(
+                    meter_info.get("unit_ids"),
+                    primary_unit_id=meter_info.get("primary_unit_id"),
+                )
         await self._client.init_data()
         if self._client.meter_configured and self._client.primary_meter_unit_id not in self._client._meter_unit_ids:
             _LOGGER.warning(
-                "Discovered secondary meter unit ids %s, but primary meter unit id %s is missing; Load and Grid status will stay unavailable",
+                "Configured meter unit ids %s do not include the primary meter unit id %s; Load and Grid status will stay unavailable",
                 self._client._meter_unit_ids,
                 self._client.primary_meter_unit_id,
             )

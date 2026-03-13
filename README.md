@@ -38,6 +38,7 @@ If you provide the inverter Web API customer password in the integration setup, 
 
 - auto-enable Modbus TCP during setup and relevant configuration changes
 - optionally restrict auto-enabled Modbus TCP to the Home Assistant host IP
+- derive configured smart meter addresses from `/api/components/PowerMeter/readable`
 - expose authenticated battery controls from `/api/config/batteries`
 - expose Modbus service diagnostics from `/api/config/modbus`
 
