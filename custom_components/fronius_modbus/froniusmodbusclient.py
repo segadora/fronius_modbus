@@ -696,7 +696,7 @@ class FroniusModbusClient(ExtModbusClient):
                 self._storage_address = int(storage_model["data_address"])
                 self.storage_configured = True
 
-        model_register_count = mppt_model_length + 1
+        model_register_count = mppt_model_length
         regs = await self.get_registers(unit_id=self._inverter_unit_id, address=mppt_read_address, count=model_register_count)
         if regs is None:
             return False
@@ -709,7 +709,7 @@ class FroniusModbusClient(ExtModbusClient):
         DCV_SF = self._client.convert_from_registers(regs[2:3], data_type=self._client.DATATYPE.INT16)
         DCW_SF = self._client.convert_from_registers(regs[3:4], data_type=self._client.DATATYPE.INT16)
         DCWH_SF = self._client.convert_from_registers(regs[4:5], data_type=self._client.DATATYPE.INT16)
-        reported_module_count = self._client.convert_from_registers(regs[7:8], data_type=self._client.DATATYPE.UINT16)
+        reported_module_count = self._client.convert_from_registers(regs[6:7], data_type=self._client.DATATYPE.UINT16)
         if not self.is_numeric(reported_module_count) or int(reported_module_count) <= 0:
             return False
 
@@ -739,7 +739,7 @@ class FroniusModbusClient(ExtModbusClient):
         module_voltage = {}
 
         for module_id in range(1, module_count + 1):
-            label_idx = 20 * (module_id - 1) + 10
+            label_idx = 20 * (module_id - 1) + 9
             current_idx = 20 * module_id - 2
             voltage_idx = 20 * module_id - 1
             power_idx = 20 * module_id
@@ -858,6 +858,16 @@ class FroniusModbusClient(ExtModbusClient):
         self.data['mppt_visible_module_ids'] = pv_modules
         pv_values = [module_power.get(module_id) for module_id in pv_modules if self.is_numeric(module_power.get(module_id))]
         self.data['pv_power'] = round(sum(pv_values), 2) if pv_values else None
+        _LOGGER.debug(
+            "Parsed model 160 MPPT data: address=%s length=%s reported_count=%s visible_modules=%s storage_charge_module=%s storage_discharge_module=%s labels=%s",
+            mppt_read_address,
+            mppt_model_length,
+            reported_module_count,
+            pv_modules,
+            storage_charge_module,
+            storage_discharge_module,
+            module_labels,
+        )
 
         return True
 

@@ -132,7 +132,14 @@ def _entry_payload(data: dict[str, Any], *, reconfigure_required: bool) -> dict[
 
 
 def entry_defaults(entry: config_entries.ConfigEntry) -> dict[str, Any]:
-    return _expand_settings_input({}, {**entry.data, **entry.options})
+    defaults = {**entry.data, **entry.options}
+    try:
+        defaults[CONF_SCAN_INTERVAL] = int(
+            defaults.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+        )
+    except (TypeError, ValueError):
+        defaults[CONF_SCAN_INTERVAL] = DEFAULT_SCAN_INTERVAL
+    return _expand_settings_input({}, defaults)
 
 
 def _build_settings_schema(defaults: dict[str, Any]) -> vol.Schema:
@@ -362,7 +369,7 @@ async def async_update_entry_from_input(
 
 
 class TokenFlowMixin:
-    _pending_flow_state: _PendingFlowState | None
+    _pending_flow_state: _PendingFlowState | None = None
 
     async def _async_show_password_step(
         self,
@@ -479,7 +486,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
-        return FroniusModbusOptionsFlow(config_entry)
+        return FroniusModbusOptionsFlow()
 
     async def _async_finish_user(self, settings, info, previous_host):
         del previous_host
@@ -544,10 +551,6 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
 
 class FroniusModbusOptionsFlow(TokenFlowMixin, config_entries.OptionsFlow):
     """Handle Fronius Modbus options."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
-        self._pending_flow_state = None
 
     async def _async_finish_options(self, settings, info, previous_host):
         del info

@@ -76,6 +76,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubConfigEntry) -> bool:
 
     await entry.runtime_data.init_data(config_entry=entry)
     await migrations.async_remove_unused_mppt_entities(hass, entry, entry.runtime_data)
+    await migrations.async_remove_unsupported_single_phase_meter_entities(
+        hass,
+        entry,
+        entry.runtime_data,
+    )
     await migrations.async_sync_reconfigure_issue(
         hass,
         entry,
@@ -84,6 +89,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HubConfigEntry) -> bool:
 
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await migrations.async_repair_soc_minimum_entity_id(hass, entry, entry.runtime_data)
     return True
 
 

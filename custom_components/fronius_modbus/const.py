@@ -176,6 +176,16 @@ METER_SENSOR_TYPES = {
     'unit_id': ['Modbus ID', 'unit_id', None, None, None, None, EntityCategory.DIAGNOSTIC],
 }
 
+SINGLE_PHASE_UNSUPPORTED_METER_SENSOR_KEYS = (
+    "AphB",
+    "AphC",
+    "WphB",
+    "WphC",
+    "PhVphB",
+    "PhVphC",
+    "PPV",
+)
+
 STORAGE_SENSOR_TYPES = {
     'control_mode': ['Core storage control mode', 'control_mode', None, None, None, None, EntityCategory.DIAGNOSTIC],
     'charge_status': ['Charge status', 'charge_status', None, None, None, None, None, EntityCategory.DIAGNOSTIC],
