@@ -27,6 +27,7 @@ from .const import (
     DOMAIN,
     MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
     METER_SENSOR_TYPES,
+    SINGLE_PHASE_UNSUPPORTED_METER_SENSOR_KEYS,
 )
 from .froniuswebclient import mint_token
 from .token_store import async_get_token_store
@@ -155,6 +156,14 @@ def _is_fallback_storage_soc_minimum_entity_id(entity_id: str) -> bool:
     return bool(_FALLBACK_STORAGE_SOC_MINIMUM_ENTITY_ID_RE.fullmatch(entity_id))
 
 
+def _single_phase_meter_phase_count(runtime_data: hub.Hub, unit_id: int) -> int | None:
+    try:
+        phase_count = runtime_data.data.get(f"meter_{int(unit_id)}_phase_count")
+        return int(phase_count) if phase_count is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 async def _async_remove_current_meter_entities(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -169,6 +178,40 @@ async def _async_remove_current_meter_entities(
 
     if removed:
         _LOGGER.info("Removed %s current meter entities for naming migration", removed)
+
+
+async def async_remove_unsupported_single_phase_meter_entities(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    runtime_data: hub.Hub,
+) -> None:
+    single_phase_unit_ids = [
+        int(unit_id)
+        for unit_id in runtime_data._client._meter_unit_ids
+        if _single_phase_meter_phase_count(runtime_data, unit_id) == 1
+    ]
+    if not single_phase_unit_ids:
+        return
+
+    unsupported_unique_ids = {
+        f"{runtime_data.entity_prefix}_meter_{unit_id}_{key}"
+        for unit_id in single_phase_unit_ids
+        for key in SINGLE_PHASE_UNSUPPORTED_METER_SENSOR_KEYS
+    }
+    registry = er.async_get(hass)
+    removed = 0
+    for entity_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+        unique_id = entity_entry.unique_id or ""
+        if unique_id in unsupported_unique_ids:
+            registry.async_remove(entity_entry.entity_id)
+            removed += 1
+
+    if removed:
+        _LOGGER.info(
+            "Removed %s unsupported single-phase meter entities for %s",
+            removed,
+            entry.title or entry.entry_id,
+        )
 
 
 async def _async_update_entry_auth_state(

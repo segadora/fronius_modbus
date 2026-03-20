@@ -17,6 +17,7 @@ from .const import (
     MPPT_MODULE_SENSOR_TYPES,
     INVERTER_STORAGE_SENSOR_TYPES,
     METER_SENSOR_TYPES,
+    SINGLE_PHASE_UNSUPPORTED_METER_SENSOR_KEYS,
     STORAGE_SENSOR_TYPES,
 )
 from .hub import Hub
@@ -118,7 +119,10 @@ async def async_setup_entry(
             prefix = _meter_prefix(meter_unit_id)
             if f"{prefix}unit_id" not in hub.data:
                 continue
+            phase_count = hub.data.get(f"{prefix}phase_count")
             for sensor_info in METER_SENSOR_TYPES.values():
+                if phase_count == 1 and sensor_info[1] in SINGLE_PHASE_UNSUPPORTED_METER_SENSOR_KEYS:
+                    continue
                 sensor = FroniusModbusSensor(
                     coordinator=coordinator,
                     device_info=hub.get_device_info_meter(meter_unit_id),
