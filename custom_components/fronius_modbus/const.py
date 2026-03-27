@@ -18,6 +18,7 @@ DEFAULT_RESTRICT_MODBUS_TO_THIS_IP = False
 API_USERNAME = "customer"
 CONF_RECONFIGURE_REQUIRED = "_reconfigure_required"
 MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX = "legacy_modbus_only_reconfigure_"
+JSON_API_LOW_FIRMWARE_ISSUE_ID_PREFIX = "json_api_low_firmware_"
 CONF_INVERTER_UNIT_ID = 'inverter_modbus_unit_id'
 CONF_METER_UNIT_ID = 'meter_modbus_unit_id'
 CONF_METER_UNIT_IDS = 'meter_modbus_unit_ids'
@@ -85,6 +86,10 @@ INVERTER_SELECT_TYPES = [
     ['AC limit enable', 'ac_limit_enable', {0: 'Disabled', 1: 'Enabled'}],
     ['Power factor control', 'power_factor_enable', {0: 'Disabled', 1: 'Enabled'}],
     ['Inverter connection', 'Conn', {0: 'Disabled', 1: 'Enabled'}],
+]
+
+INVERTER_API_SWITCH_TYPES = [
+    ['JSON API', 'api_solar_api_enabled', 'mdi:api', EntityCategory.DIAGNOSTIC],
 ]
 
 INVERTER_SENSOR_TYPES = {

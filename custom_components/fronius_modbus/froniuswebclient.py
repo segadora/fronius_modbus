@@ -385,6 +385,9 @@ class FroniusWebClient:
     def get_modbus_config(self) -> dict[str, Any]:
         return self._get_json("/api/config/modbus")
 
+    def get_solar_api_config(self) -> dict[str, Any]:
+        return self._get_json("/api/config/solar_api")
+
     def get_storage_info(self) -> dict[str, str | None]:
         try:
             nodes, _ = _body_data(
@@ -482,6 +485,13 @@ class FroniusWebClient:
 
     def get_battery_config(self) -> dict[str, Any]:
         return self._get_json("/api/config/batteries")
+
+    def set_solar_api_enabled(self, enabled: bool) -> bool:
+        payload = {
+            "SolarAPIv1Enabled": bool(enabled),
+            "activeOnExternalDevicesDiscovered": False,
+        }
+        return self._post_ok("/api/config/solar_api", payload)
 
     def set_battery_config(
         self,

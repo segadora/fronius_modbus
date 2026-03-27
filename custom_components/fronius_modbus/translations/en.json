@@ -92,6 +92,43 @@
           "default": "Configuration updated successfully."
         }
       }
+    },
+    "json_api_low_firmware": {
+      "title": "Disable Fronius JSON API on older firmware",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Disable JSON API",
+            "description": "The inverter \"{entry_title}\" is running firmware {current_version}, which is below the safe minimum {minimum_version}. When JSON API stays enabled on older firmware it can cause a memory leak and inverter outages over time. Choose whether to disable JSON API now or ignore this warning.",
+            "menu_options": {
+              "fix": "Disable JSON API",
+              "ignore": "Ignore warning"
+            },
+            "menu_option_descriptions": {
+              "fix": "Recommended for firmware below {minimum_version}.",
+              "ignore": "Keep JSON API enabled and hide this warning for now."
+            }
+          },
+          "confirm": {
+            "title": "Disable JSON API",
+            "description": "Press Submit to disable JSON API on the inverter \"{entry_title}\".",
+            "submit": "Disable JSON API",
+            "data": {}
+          }
+        },
+        "error": {
+          "cannot_connect": "Failed to connect to the inverter.",
+          "invalid_api_credentials": "Customer login failed.",
+          "unknown": "Unknown error"
+        },
+        "abort": {
+          "entry_not_found": "The Fronius entry no longer exists.",
+          "issue_ignored": "The warning was ignored. You can unignore it later from Repairs."
+        },
+        "create_entry": {
+          "default": "JSON API disabled successfully."
+        }
+      }
     }
   },
   "options": {

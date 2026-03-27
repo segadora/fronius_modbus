@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from datetime import timedelta
 from typing import Any
@@ -22,11 +23,16 @@ from .const import (
     DOMAIN,
     ENTITY_PREFIX,
     API_USERNAME,
+    JSON_API_LOW_FIRMWARE_ISSUE_ID_PREFIX,
     MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
 )
 from .token_store import async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)
+_SOLAR_API_WARNING_TRANSLATION_KEY = "json_api_low_firmware"
+_SOLAR_API_MINIMUM_VERSION = (1, 40, 7, 1)
+_SOLAR_API_MINIMUM_VERSION_TEXT = "1.40.7-1"
+_SOLAR_API_FIRMWARE_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:-(\d+))?$")
 
 WEB_API_DATA_KEYS = (
     "api_modbus_mode",
@@ -34,6 +40,7 @@ WEB_API_DATA_KEYS = (
     "api_modbus_sunspec_mode",
     "api_modbus_restriction",
     "api_modbus_restriction_ip",
+    "api_solar_api_enabled",
     "api_battery_mode_raw",
     "api_battery_mode_effective_raw",
     "api_battery_mode_consistent",
@@ -172,6 +179,66 @@ class Hub:
 
     def _meter_prefix(self, unit_id: int) -> str:
         return f"meter_{int(unit_id)}_"
+
+    def _solar_api_warning_issue_id(self) -> str | None:
+        if self._config_entry is None:
+            return None
+        return f"{JSON_API_LOW_FIRMWARE_ISSUE_ID_PREFIX}{self._config_entry.entry_id}"
+
+    def _parse_firmware_version(self, version_text: Any) -> tuple[int, int, int, int] | None:
+        if not isinstance(version_text, str):
+            return None
+
+        match = _SOLAR_API_FIRMWARE_RE.fullmatch(version_text.strip())
+        if match is None:
+            return None
+
+        major, minor, patch, build = match.groups(default="0")
+        return (int(major), int(minor), int(patch), int(build))
+
+    def _solar_api_warning_needed(self) -> bool:
+        if not self.web_api_configured:
+            return False
+
+        firmware_version = self._parse_firmware_version(self._client.data.get("i_sw_version"))
+        if firmware_version is None:
+            return False
+
+        solar_api_enabled = self._client.data.get("api_solar_api_enabled")
+        if solar_api_enabled is not True:
+            return False
+
+        return firmware_version < _SOLAR_API_MINIMUM_VERSION
+
+    async def _async_sync_solar_api_warning(self) -> None:
+        issue_id = self._solar_api_warning_issue_id()
+        if issue_id is None:
+            return
+
+        if not self._solar_api_warning_needed():
+            ir.async_delete_issue(self._hass, DOMAIN, issue_id)
+            return
+
+        current_version = self._client.data.get("i_sw_version")
+        ir.async_create_issue(
+            self._hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=True,
+            is_persistent=True,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=_SOLAR_API_WARNING_TRANSLATION_KEY,
+            translation_placeholders={
+                "entry_title": self._config_entry.title if self._config_entry is not None else self._name,
+                "current_version": str(current_version),
+                "minimum_version": _SOLAR_API_MINIMUM_VERSION_TEXT,
+            },
+            data={
+                "entry_id": self._config_entry.entry_id,
+                "current_version": str(current_version),
+                "minimum_version": _SOLAR_API_MINIMUM_VERSION_TEXT,
+            },
+        )
 
     async def init_data(
         self,
@@ -394,6 +461,7 @@ class Hub:
         self._webclient = None
         self._clear_web_api_data()
         await async_get_token_store(self._hass).async_delete_token(self._host, API_USERNAME)
+        await self._async_sync_solar_api_warning()
 
         if self._config_entry is not None:
             ir.async_create_issue(
@@ -468,15 +536,37 @@ class Hub:
             return
 
         modbus_config = await self._async_web_job(self._webclient.get_modbus_config)
-        if not isinstance(modbus_config, dict):
-            return
-        self._apply_web_modbus_config(modbus_config)
+        if isinstance(modbus_config, dict):
+            self._apply_web_modbus_config(modbus_config)
+
+        solar_api_config = await self._async_web_job(self._webclient.get_solar_api_config)
+        if isinstance(solar_api_config, dict):
+            enabled = solar_api_config.get("SolarAPIv1Enabled")
+            self.data["api_solar_api_enabled"] = (
+                self._enabled_bool(enabled) if enabled is not None else None
+            )
+        else:
+            self.data["api_solar_api_enabled"] = None
 
         if self.storage_configured:
             battery_config = await self._async_web_job(self._webclient.get_battery_config)
-            if not isinstance(battery_config, dict):
-                return
-            self._apply_web_battery_config(battery_config)
+            if isinstance(battery_config, dict):
+                self._apply_web_battery_config(battery_config)
+
+        await self._async_sync_solar_api_warning()
+
+    @toggle_busy
+    async def set_solar_api_enabled(self, enabled: bool) -> None:
+        if not self._webclient:
+            return
+
+        await self._async_web_job(
+            self._webclient.set_solar_api_enabled,
+            enabled,
+            raise_on_auth_failure=True,
+        )
+        self.data["api_solar_api_enabled"] = bool(enabled)
+        await self._async_sync_solar_api_warning()
 
     def _get_next_soc_limits(
         self,
