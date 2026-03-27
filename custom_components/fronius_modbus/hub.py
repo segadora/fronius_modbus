@@ -59,10 +59,15 @@ WEB_API_DATA_KEYS = (
 
 BATTERY_WRITE_MODBUS_RECOVERY_SECONDS = 30.0
 BATTERY_WRITE_WEB_REFRESH_DELAY_SECONDS = 10.0
+# Load is derived from separate inverter/meter polls, so keep a small skew guard.
 LOAD_MAX_SAMPLE_SKEW_SECONDS = 0.5
+# Fronius occasionally drops inverter AC power to ~0 for one poll while PV is clearly active.
 LOAD_GLITCH_MIN_EXPORT_W = 1000.0
 LOAD_GLITCH_MAX_ABS_INVERTER_W = 50.0
 LOAD_GLITCH_MIN_PV_W = 1000.0
+# During strong battery charging on Verto, meter export can exceed inverter AC power and
+# the simple grid-meter formula produces bogus negative/zero load values.
+LOAD_STORAGE_CHARGE_MIN_W = 1000.0
 
 
 class FroniusCoordinator(DataUpdateCoordinator):
@@ -230,6 +235,7 @@ class Hub:
 
     def _apply_glitch_load_fallback(self) -> None:
         self._consecutive_bad_load_polls += 1
+        # Keep one last-good value for a single bad poll, then fall back to unavailable.
         if self._consecutive_bad_load_polls == 1 and self._last_good_load_w is not None:
             self.data["load"] = self._last_good_load_w
 
@@ -638,6 +644,7 @@ class Hub:
             or not self._client.is_numeric(inverter_power)
             or abs(inverter_sample_ts - meter_sample_ts) > LOAD_MAX_SAMPLE_SKEW_SECONDS
         ):
+            # Do not mix inverter and meter values from different poll moments.
             self._reset_bad_load_tracking()
             return
         inverter_power_f = float(inverter_power)
@@ -649,6 +656,17 @@ class Hub:
             inverter_power=inverter_power_f,
         ):
             self._apply_glitch_load_fallback()
+            return
+
+        storage_charge_power = self.data.get("storage_charge_power")
+        if (
+            candidate_load < 0
+            and self.storage_configured
+            and self._client.is_numeric(storage_charge_power)
+            and float(storage_charge_power) >= LOAD_STORAGE_CHARGE_MIN_W
+        ):
+            # Battery charging can make the simple formula lie; prefer unavailable over bogus 0 W.
+            self._reset_bad_load_tracking()
             return
 
         self._set_load(max(candidate_load, 0.0), cache=True, inverter_power=inverter_power_f)
