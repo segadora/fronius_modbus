@@ -18,7 +18,7 @@ DEFAULT_RESTRICT_MODBUS_TO_THIS_IP = False
 API_USERNAME = "customer"
 CONF_RECONFIGURE_REQUIRED = "_reconfigure_required"
 MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX = "legacy_modbus_only_reconfigure_"
-JSON_API_LOW_FIRMWARE_ISSUE_ID_PREFIX = "json_api_low_firmware_"
+SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX = "solar_api_low_firmware_"
 CONF_INVERTER_UNIT_ID = 'inverter_modbus_unit_id'
 CONF_METER_UNIT_ID = 'meter_modbus_unit_id'
 CONF_METER_UNIT_IDS = 'meter_modbus_unit_ids'
@@ -89,13 +89,18 @@ INVERTER_SELECT_TYPES = [
 ]
 
 INVERTER_API_SWITCH_TYPES = [
-    ['JSON API', 'api_solar_api_enabled', 'mdi:api', EntityCategory.DIAGNOSTIC],
+    ['Solar API', 'api_solar_api_enabled', 'mdi:api', EntityCategory.DIAGNOSTIC],
+]
+
+INVERTER_API_BUTTON_TYPES = [
+    ['Reset Modbus Control', 'reset_modbus_control', 'mdi:restart', EntityCategory.DIAGNOSTIC],
 ]
 
 INVERTER_SENSOR_TYPES = {
     'A': ['AC current', 'A', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
     'AphA': ['AC current L1', 'AphA', SensorDeviceClass.CURRENT, SensorStateClass.MEASUREMENT, 'A', 'mdi:current-ac', None],
     'acpower': ['AC power', 'acpower', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:lightning-bolt', None],
+    'var': ['Reactive power', 'var', None, SensorStateClass.MEASUREMENT, 'var', 'mdi:sine-wave', None],
     'acenergy': ['AC energy', 'acenergy', SensorDeviceClass.ENERGY, SensorStateClass.TOTAL_INCREASING, 'Wh', 'mdi:lightning-bolt', None],
     'tempcab': ['Temperature', 'tempcab', SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, '°C', 'mdi:thermometer', None],
     'pv_power': ['PV power', 'pv_power', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:solar-power', None],

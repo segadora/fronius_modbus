@@ -23,13 +23,13 @@ from .const import (
     DOMAIN,
     ENTITY_PREFIX,
     API_USERNAME,
-    JSON_API_LOW_FIRMWARE_ISSUE_ID_PREFIX,
+    SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX,
     MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX,
 )
 from .token_store import async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)
-_SOLAR_API_WARNING_TRANSLATION_KEY = "json_api_low_firmware"
+_SOLAR_API_WARNING_TRANSLATION_KEY = "solar_api_low_firmware"
 _SOLAR_API_MINIMUM_VERSION = (1, 40, 7, 1)
 _SOLAR_API_MINIMUM_VERSION_TEXT = "1.40.7-1"
 _SOLAR_API_FIRMWARE_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:-(\d+))?$")
@@ -186,7 +186,7 @@ class Hub:
     def _solar_api_warning_issue_id(self) -> str | None:
         if self._config_entry is None:
             return None
-        return f"{JSON_API_LOW_FIRMWARE_ISSUE_ID_PREFIX}{self._config_entry.entry_id}"
+        return f"{SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX}{self._config_entry.entry_id}"
 
     def _parse_firmware_version(self, version_text: Any) -> tuple[int, int, int, int] | None:
         if not isinstance(version_text, str):
@@ -372,7 +372,7 @@ class Hub:
         if self._client.mppt_configured:
             await self._async_optional_poll("mppt", self._client.read_mppt_data)
 
-        await self._async_optional_poll("ac limit", self._client.read_export_limit_data)
+        await self._async_optional_poll("ac limit", self._client.read_ac_limit_data)
 
         if self._client.storage_configured:
             await self._async_optional_poll("storage", self._client.read_inverter_storage_data)
@@ -622,6 +622,16 @@ class Hub:
         )
         self.data["api_solar_api_enabled"] = bool(enabled)
         await self._async_sync_solar_api_warning()
+
+    @toggle_busy
+    async def reset_modbus_control(self) -> None:
+        if not self._webclient:
+            return
+
+        await self._async_web_job(
+            self._webclient.reset_modbus_control,
+            raise_on_auth_failure=True,
+        )
 
     def _get_next_soc_limits(
         self,

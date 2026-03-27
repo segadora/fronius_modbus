@@ -359,7 +359,7 @@ class FroniusWebClient:
     def _get_json(self, path: str) -> dict[str, Any]:
         return self._request("get", path).json()
 
-    def _post_ok(self, path: str, payload: dict[str, Any]) -> bool:
+    def _post_ok(self, path: str, payload: dict[str, Any] | None = None) -> bool:
         return self._request("post", path, payload=payload).ok
 
     def issued_token(self) -> dict[str, str] | None:
@@ -496,6 +496,9 @@ class FroniusWebClient:
             "activeOnExternalDevicesDiscovered": False,
         }
         return self._post_ok("/api/config/solar_api", payload)
+
+    def reset_modbus_control(self) -> bool:
+        return self._post_ok("/api/commands/ModbusReset")
 
     def set_battery_config(
         self,
