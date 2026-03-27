@@ -87,6 +87,49 @@ def _parse_storage_info(attributes: Any) -> dict[str, str | None]:
     }
 
 
+def _parse_storage_readable(payload: Any) -> dict[str, Any]:
+    info = _parse_storage_info(None)
+    info["cell_temperature"] = None
+
+    nodes, _ = _body_data(payload, "Body", "Data")
+    if not isinstance(nodes, dict):
+        return info
+
+    device = next(iter(nodes.values()), {})
+    if not isinstance(device, dict):
+        return info
+
+    attributes = device.get("attributes") if isinstance(device.get("attributes"), dict) else None
+    channels = device.get("channels") if isinstance(device.get("channels"), dict) else None
+
+    info.update(_parse_storage_info(attributes))
+    if channels is not None:
+        value = channels.get("BAT_TEMPERATURE_CELL_F64")
+        if isinstance(value, (int, float)):
+            info["cell_temperature"] = float(value)
+    return info
+
+
+def _parse_inverter_readable(payload: Any) -> dict[str, Any]:
+    info: dict[str, Any] = {"temperature": None}
+    nodes, _ = _body_data(payload, "Body", "Data")
+    if not isinstance(nodes, dict):
+        return info
+
+    device = next(iter(nodes.values()), {})
+    if not isinstance(device, dict):
+        return info
+
+    channels = device.get("channels") if isinstance(device.get("channels"), dict) else None
+    if channels is None:
+        return info
+
+    value = channels.get("DEVICE_TEMPERATURE_AMBIENTMEAN_01_F32")
+    if isinstance(value, (int, float)):
+        info["temperature"] = float(value)
+    return info
+
+
 def _body_data(payload: Any, *path: str) -> tuple[dict[str, Any] | None, str | None]:
     if not isinstance(payload, dict):
         return None, None
@@ -392,21 +435,27 @@ class FroniusWebClient:
     def get_solar_api_config(self) -> dict[str, Any]:
         return self._get_json("/api/config/solar_api")
 
-    def get_storage_info(self) -> dict[str, str | None]:
+    def get_storage_info(self) -> dict[str, Any]:
         try:
-            nodes, _ = _body_data(
-                self._get_json("/api/components/BatteryManagementSystem/readable"),
-                "Body",
-                "Data",
+            return _parse_storage_readable(
+                self._get_json("/api/components/BatteryManagementSystem/readable")
             )
-            device = next(iter(nodes.values()), {}) if isinstance(nodes, dict) else {}
-            attributes = device.get("attributes") if isinstance(device, dict) else None
-            return _parse_storage_info(attributes)
         except FroniusWebAuthError:
             raise
         except Exception as err:
             _LOGGER.warning("Failed reading storage identity via web API from %s: %s", self._host, err)
-        return _parse_storage_info(None)
+        return _parse_storage_readable(None)
+
+    def get_inverter_info(self) -> dict[str, Any]:
+        try:
+            return _parse_inverter_readable(
+                self._get_json("/api/components/inverter/readable")
+            )
+        except FroniusWebAuthError:
+            raise
+        except Exception as err:
+            _LOGGER.warning("Failed reading inverter readable data via web API from %s: %s", self._host, err)
+        return _parse_inverter_readable(None)
 
     def get_power_meter_info(self, meter_address_offset: int = 200) -> dict[str, Any] | None:
         try:

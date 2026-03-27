@@ -35,6 +35,7 @@ _LEGACY_ENTITY_SUFFIXES = (
     "export_limit_enable",
     "minimum_reserve",
     "storage_power",
+    "tempcab",
 )
 _FALLBACK_STORAGE_SOC_MINIMUM_ENTITY_ID_RE = re.compile(
     r"^number\.battery_storage_soc_minimum(?:_\d+)?$"

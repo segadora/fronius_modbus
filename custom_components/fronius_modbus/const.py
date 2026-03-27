@@ -102,7 +102,6 @@ INVERTER_SENSOR_TYPES = {
     'acpower': ['AC power', 'acpower', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:lightning-bolt', None],
     'var': ['Reactive power', 'var', None, SensorStateClass.MEASUREMENT, 'var', 'mdi:sine-wave', None],
     'acenergy': ['AC energy', 'acenergy', SensorDeviceClass.ENERGY, SensorStateClass.TOTAL_INCREASING, 'Wh', 'mdi:lightning-bolt', None],
-    'tempcab': ['Temperature', 'tempcab', SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, '°C', 'mdi:thermometer', None],
     'pv_power': ['PV power', 'pv_power', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:solar-power', None],
     'load': ['Load', 'load', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:lightning-bolt', None],
     'pv_connection': ['PV connection', 'pv_connection', None, None, None, None, EntityCategory.DIAGNOSTIC],
@@ -130,6 +129,7 @@ INVERTER_SENSOR_TYPES = {
 }
 
 INVERTER_WEB_SENSOR_TYPES = {
+    'inverter_temperature': ['Temperature', 'inverter_temperature', SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, '°C', 'mdi:thermometer', None],
     'api_modbus_mode': ['Web API Modbus mode', 'api_modbus_mode', None, None, None, None, EntityCategory.DIAGNOSTIC],
     'api_modbus_control': ['Web API Modbus control', 'api_modbus_control', None, None, None, None, EntityCategory.DIAGNOSTIC],
     'api_modbus_sunspec_mode': ['Web API SunSpec mode', 'api_modbus_sunspec_mode', None, None, None, None, EntityCategory.DIAGNOSTIC],
@@ -197,6 +197,7 @@ SINGLE_PHASE_UNSUPPORTED_METER_SENSOR_KEYS = (
 )
 
 STORAGE_SENSOR_TYPES = {
+    'storage_temperature': ['Cell temperature', 'storage_temperature', SensorDeviceClass.TEMPERATURE, SensorStateClass.MEASUREMENT, '°C', 'mdi:thermometer', None],
     'control_mode': ['Core storage control mode', 'control_mode', None, None, None, None, EntityCategory.DIAGNOSTIC],
     'charge_status': ['Charge status', 'charge_status', None, None, None, None, None, EntityCategory.DIAGNOSTIC],
     'max_charge': ['Max charging power', 'max_charge', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:gauge', EntityCategory.DIAGNOSTIC],
