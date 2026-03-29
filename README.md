@@ -3,15 +3,18 @@
 # fronius_modbus
 This is a fork from redpomodoro/fronius_modbus, with some merged changes and PRs.
 
-Home Assistant custom component for reading data from Fronius GEN24 and Verto inverters, connected smart meters, and battery storage. This integration uses a local Modbus connection.
+Home Assistant custom component for reading data from Fronius GEN24 and Verto inverters, connected smart meters, and battery storage. This integration uses a Modbus-first + authenticated Web API connection model.
 
-It can also use the authenticated Fronius web API for setup assistance and battery controls that are not available over Modbus.
+It can use the authenticated Fronius web API for setup assistance and battery controls that are not available over Modbus.
 
 > [!CAUTION]
 > This is a work in progress project - it is still in early development stage, so there are still breaking changes possible.
 >
 > This is an unofficial implementation and not supported by Fronius. It might stop working at any point in time.
 > You are using this module (and it's prerequisites/dependencies) at your own risk. Not me neither any of contributors to this or any prerequired/dependency project are responsible for damage in any kind caused by this project or any of its prerequsites/dependencies.
+
+> [!IMPORTANT]
+> Its recommended to keep the inverter up to date, this integration will only be tested on recent firmwares. It is suggested to update your GEN24 inverter firmware to 1.40.0 or higher as issues have been reported in earlier firmwares of the Solar API caused multiple outages on GEN24 inverters. As of Mar 26, this firmware update has limited availability, so other areas might take longer.
 
 # Installation
 
@@ -56,9 +59,6 @@ Turn off scheduled (dis)charging in the web UI to avoid unexpected behavior.
 
 > [!IMPORTANT]
 > When using multiple integrations that use pymodbus package it can lead to version conflicts as they will share 1 package in HA. This can be fixed by removing ALL integrations using pymodbus and modbus configuratio.yaml (for the build in integration into HA), rebooting HA and then reinstalling the integrations and the modbus configuration yaml.
-
-> [!IMPORTANT]
-> Update your GEN24 inverter firmware to 1.34.6-1 or higher otherwise battery charging might be limited. Its recommended to keep the inverter up to date, this integration will only be tested on recent firmwares.
 
 # Usage
 
@@ -175,7 +175,7 @@ Note to change the mode first then set controls active in that mode.
 | Power Factor         | Fixed power factor (`OutPFSet`). Range is `-1.0` to `1.0`. Negative values are over-excited, positive values are under-excited. |
 
 # Example Devices
-
+These images are examples, and have recently changed slightly. They will be grouped into two categories one for the inverter, and one for the battery. Previously the WattMeter was shown separately. 
 Battery Storage
 ![battery storage](images/example_batterystorage.jpg?raw=true "storage")
 
