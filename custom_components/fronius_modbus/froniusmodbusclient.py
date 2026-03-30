@@ -1362,7 +1362,7 @@ class FroniusModbusClient(ExtModbusClient):
     async def set_grid_charge_mode(self):
         grid_charge_power = self.data.get('grid_charge_power', 0)
         await self._set_named_mode(
-            mode=2,
+            mode=1,
             charge_limit=100,
             discharge_limit=0,
             grid_charge_power=grid_charge_power,
@@ -1373,7 +1373,7 @@ class FroniusModbusClient(ExtModbusClient):
     async def set_grid_discharge_mode(self):
         grid_discharge_power = self.data.get('grid_discharge_power', 0)
         await self._set_named_mode(
-            mode=1,
+            mode=2,
             charge_limit=0,
             discharge_limit=100,
             grid_discharge_power=grid_discharge_power,
