@@ -574,7 +574,7 @@ class FroniusModbusClient(ExtModbusClient):
 
             manufacturer = str(self.data.get(prefix + "manufacturer") or "").strip()
             model = str(self.data.get(prefix + "model") or "").strip()
-            if manufacturer == "Fronius" and "meter" in model.lower():
+            if manufacturer == "Fronius" and ("meter" in model.lower() or "wattnode" in model.lower()):
                 discovered_meter_unit_ids.append(unit_id)
 
         self._meter_unit_ids = discovered_meter_unit_ids
