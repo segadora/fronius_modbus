@@ -1040,8 +1040,13 @@ class FroniusModbusClient(ExtModbusClient):
         self._set_calculated('WDisChaGra', raw['WDisChaGra'], 0, 0)
 
         mapped_control_mode = self._map_value(STORAGE_CONTROL_MODE, raw['storage_control_mode'], 'storage control mode')
+        normalized_control_mode = mapped_control_mode
+        if raw['discharge_power'] < 0:
+            normalized_control_mode = STORAGE_CONTROL_MODE.get(1, mapped_control_mode)
+        elif raw['charge_power'] < 0:
+            normalized_control_mode = STORAGE_CONTROL_MODE.get(2, mapped_control_mode)
         control_mode = self.data.get('control_mode')
-        if control_mode is None or control_mode != mapped_control_mode:
+        if control_mode is None or control_mode != normalized_control_mode:
             if raw['discharge_power'] >= 0:
                 self.data['discharge_limit'] = raw['discharge_power'] / 100.0 
                 self.data['grid_charge_power'] = 0
@@ -1055,7 +1060,7 @@ class FroniusModbusClient(ExtModbusClient):
                 self.data['grid_discharge_power'] = (raw['charge_power'] * -1) / 100.0 
                 self.data['charge_limit'] = 0
 
-            self.data['control_mode'] = mapped_control_mode
+            self.data['control_mode'] = normalized_control_mode
 
         # set extended storage control mode at startup
         ext_control_mode = self.data.get('ext_control_mode')
