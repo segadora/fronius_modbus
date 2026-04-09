@@ -1045,6 +1045,8 @@ class FroniusModbusClient(ExtModbusClient):
             normalized_control_mode = STORAGE_CONTROL_MODE.get(1, mapped_control_mode)
         elif raw['storage_control_mode'] == 2 and raw['charge_grid_set'] == 1 and raw['discharge_power'] == 0:
             normalized_control_mode = STORAGE_CONTROL_MODE.get(1, mapped_control_mode)
+        elif raw['storage_control_mode'] == 1 and self.storage_extended_control_mode == 5 and raw['charge_power'] == 0:
+            normalized_control_mode = STORAGE_CONTROL_MODE.get(2, mapped_control_mode)
         elif raw['charge_power'] < 0:
             normalized_control_mode = STORAGE_CONTROL_MODE.get(2, mapped_control_mode)
         control_mode = self.data.get('control_mode')
