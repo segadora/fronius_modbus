@@ -174,7 +174,7 @@ def _parse_power_meter_info(
 
         if rtu_addr <= 0:
             continue
-        if manufacturer != "Fronius" or not model or not ("meter" in model.lower() or "wattnode" in model.lower()):
+        if manufacturer != "Fronius" or not model or not ("meter" in model.lower() or "wattnode" in model.lower() or "42,0411" in model.lower()):
             continue
 
         label = (_clean_text(attributes.get("label")) or "").lower()
