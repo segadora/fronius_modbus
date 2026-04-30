@@ -100,10 +100,6 @@ INVERTER_SELECT_TYPES = [
     ['Conn', 'Conn', {0: 'Disabled', 1: 'Enabled'}],
 ]
 
-INVERTER_POWER_LIMITS = [
-    ['api_watt_peak_reference', 'watt_peak_reference', {'min': 0, 'max': 10000000, 'step': 1, 'mode':'box', 'unit': 'W'}],
-]
-
 INVERTER_API_SWITCH_TYPES = [
     ['api_solar_api_enabled', 'api_solar_api_enabled', 'mdi:api', EntityCategory.DIAGNOSTIC],
 ]
@@ -151,6 +147,7 @@ INVERTER_WEB_SENSOR_TYPES = {
     'api_modbus_sunspec_mode': ['api_modbus_sunspec_mode', 'api_modbus_sunspec_mode', None, None, None, None, EntityCategory.DIAGNOSTIC],
     'api_modbus_restriction': ['api_modbus_restriction', 'api_modbus_restriction', None, None, None, None, EntityCategory.DIAGNOSTIC],
     'api_modbus_restriction_ip': ['api_modbus_restriction_ip', 'api_modbus_restriction_ip', None, None, None, None, EntityCategory.DIAGNOSTIC],
+    'api_watt_peak_reference': ['api_watt_peak_reference', 'api_watt_peak_reference', None, None, None, None, EntityCategory.DIAGNOSTIC],
 }
 
 MPPT_MODULE_SENSOR_TYPES = [

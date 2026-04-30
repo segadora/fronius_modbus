@@ -84,6 +84,9 @@
       },
       "power_factor": {
         "name": "Power factor"
+      },
+      "api_watt_peak_reference": {
+        "name": "Watt peak reference"
       }
     },
     "select": {

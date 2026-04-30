@@ -1061,6 +1061,22 @@ class Hub:
         self._start_battery_write_transition('Target feed in')
 
     @toggle_busy
+    async def set_api_watt_peak_reference(self, value: float):
+        if not self._webclient:
+            return
+        self._require_api_battery_mode_manual('Watt peak reference')
+
+        reference = int(round(value))
+        await self._async_web_job(
+            self._webclient.set_battery_config,
+            1,
+            reference,
+            raise_on_auth_failure=True,
+        )
+        self.data['api_watt_peak_reference'] = int(round(value))
+        self._start_battery_write_transition('Watt peak reference')
+
+    @toggle_busy
     async def set_api_soc_values(
         self,
         soc_max: int | None = None,
