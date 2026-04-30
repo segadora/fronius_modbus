@@ -94,9 +94,9 @@ INVERTER_NUMBER_TYPES = [
     ['power_factor', 'power_factor', {'min': -1, 'max': 1, 'step': 0.001, 'mode':'box', 'unit': None}],
 ]
 
-INVERTER_API_NUMBER_TYPES = {
-    'api_watt_peak_reference': ['api_watt_peak_reference', 'api_watt_peak_reference', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:lightning-bolt', None],
-}
+INVERTER_API_NUMBER_TYPES = [
+    ['api_watt_peak_reference', 'api_watt_peak_reference', {'min': 0, 'max': 100000, 'step': 1, 'mode': 'box', 'unit': 'W'}],
+]
 
 INVERTER_SELECT_TYPES = [
     ['ac_limit_enable', 'ac_limit_enable', {0: 'Disabled', 1: 'Enabled'}],

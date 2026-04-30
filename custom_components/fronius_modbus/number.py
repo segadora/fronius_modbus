@@ -59,7 +59,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities) -> None:
                     name=number_info[0],
                     key=number_info[1],
                     translation_key=number_info[0],
-                    min_val=number_info[2]['min'],
+                    min_val=number_info[2]['min'], 
                     max_val=number_info[2]['max'],
                     unit=number_info[2]['unit'],
                     mode=number_info[2]['mode'],
