@@ -607,7 +607,7 @@ class FroniusWebClient:
                 "staticControlledDevices": {},
             },
             "visualization": {
-                "wattPeakReferenceValue": watt_peak_reference,
+                # "wattPeakReferenceValue": watt_peak_reference,
                 "exportLimits": {"activePower": {}},
             },
         }
