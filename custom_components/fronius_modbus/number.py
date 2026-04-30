@@ -179,6 +179,8 @@ class FroniusModbusNumber(FroniusModbusBaseEntity, NumberEntity):
             return True
         if self._key == 'ac_limit_rate':
             return True
+        if self._key == 'api_watt_peak_reference':
+            return True
         if self._key == 'power_factor':
             return data.get('power_factor') is not None
         if self._key == 'api_battery_power':
