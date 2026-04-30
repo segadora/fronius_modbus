@@ -84,9 +84,6 @@
       },
       "power_factor": {
         "name": "Power factor"
-      },
-      "api_watt_peak_reference": {
-        "name": "Watt peak reference"
       }
     },
     "select": {
@@ -451,6 +448,9 @@
       },
       "mppt_module_lifetime_energy": {
         "name": "MPPT module {module} Lifetime energy"
+      },
+      "api_watt_peak_reference": {
+        "name": "Watt peak reference"
       }
     },
     "switch": {
