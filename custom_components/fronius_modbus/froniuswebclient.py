@@ -592,6 +592,28 @@ class FroniusWebClient:
         }
         return self._post_ok("/api/config/batteries", payload)
 
+    def set_power_limit_config(
+        self,
+        watt_peak_reference: int = 10000,
+    ) -> bool:
+        payload: dict[str, Any] = {
+            "exportLimits": {
+                "activePower": {
+                    "hardLimit": {"powerLimit": 0},
+                    "softLimit": {"powerLimit": 3500},
+                    "networkMode": "limitLocal",
+                },
+                "autodetectedControlledDevices": {},
+                "staticControlledDevices": {},
+            },
+            "visualization": {
+                "wattPeakReferenceValue": watt_peak_reference,
+                "exportLimits": {"activePower": {}},
+            },
+        }
+
+        return self._post_ok("/api/config/limit_settings/powerLimits", payload)
+
     def set_battery_charge_sources(self, charge_from_grid: bool, charge_from_ac: bool) -> bool:
         payload = {
             "HYB_EVU_CHARGEFROMGRID": bool(charge_from_grid),

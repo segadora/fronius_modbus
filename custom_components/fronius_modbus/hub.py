@@ -1064,12 +1064,10 @@ class Hub:
     async def set_api_watt_peak_reference(self, value: float):
         if not self._webclient:
             return
-        self._require_api_battery_mode_manual('Watt peak reference')
 
         reference = int(round(value))
         await self._async_web_job(
-            self._webclient.set_battery_config,
-            1,
+            self._webclient.set_power_limit_config,
             reference,
             raise_on_auth_failure=True,
         )
