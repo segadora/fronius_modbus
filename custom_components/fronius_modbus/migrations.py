@@ -36,7 +36,7 @@ from .const import (
     STORAGE_API_SWITCH_TYPES,
     STORAGE_MODBUS_NUMBER_TYPES,
     STORAGE_MODBUS_SELECT_TYPES,
-    STORAGE_SENSOR_TYPES, INVERTER_API_POWER_LIMITS,
+    STORAGE_SENSOR_TYPES,
 )
 from .token_store import async_get_token_store
 
