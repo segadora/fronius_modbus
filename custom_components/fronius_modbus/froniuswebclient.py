@@ -623,7 +623,14 @@ class FroniusWebClient:
                 "staticControlledDevices": {},
             },
             "visualization": {
-                "exportLimits": {"activePower": {}},
+                "wattPeakReferenceValue": 3800,
+                "exportLimits": {
+                    "activePower": {
+                        "hardLimit": {"powerLimit": 0},
+                        "softLimit": {"powerLimit": 10},
+                        "networkMode": "limitLocal",
+                    },
+                },
             },
         }
 
