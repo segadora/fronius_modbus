@@ -147,7 +147,7 @@ INVERTER_WEB_SENSOR_TYPES = {
     'api_modbus_sunspec_mode': ['api_modbus_sunspec_mode', 'api_modbus_sunspec_mode', None, None, None, None, EntityCategory.DIAGNOSTIC],
     'api_modbus_restriction': ['api_modbus_restriction', 'api_modbus_restriction', None, None, None, None, EntityCategory.DIAGNOSTIC],
     'api_modbus_restriction_ip': ['api_modbus_restriction_ip', 'api_modbus_restriction_ip', None, None, None, None, EntityCategory.DIAGNOSTIC],
-    'api_watt_peak_reference': ['api_watt_peak_reference', 'api_watt_peak_reference', None, None, None, None, EntityCategory.DIAGNOSTIC],
+    'api_watt_peak_reference': ['api_watt_peak_reference', 'api_watt_peak_reference', SensorDeviceClass.POWER, SensorStateClass.MEASUREMENT, 'W', 'mdi:lightning-bolt', EntityCategory.DIAGNOSTIC],
 }
 
 MPPT_MODULE_SENSOR_TYPES = [
