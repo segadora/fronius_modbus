@@ -55,6 +55,7 @@ WEB_API_DATA_KEYS = (
     "api_backup_reserved",
     "api_charge_from_ac",
     "api_charge_from_grid",
+    "api_watt_peak_reference",
 )
 
 BATTERY_WRITE_MODBUS_RECOVERY_SECONDS = 30.0
@@ -599,6 +600,10 @@ class Hub:
         self.data['api_charge_from_ac'] = self._enabled_bool(battery_config.get('HYB_BM_CHARGEFROMAC'))
         self.data['api_charge_from_grid'] = self._enabled_bool(battery_config.get('HYB_EVU_CHARGEFROMGRID'))
 
+    def _apply_power_limit_config(self, power_limit_config: dict[str, Any]) -> None:
+        visualization = power_limit_config.get('visualization') or {}
+        self.data['api_watt_peak_reference'] = self._as_int(visualization.get('wattPeakReferenceValue'))
+
     def _apply_web_modbus_config(self, modbus_config: dict[str, Any]) -> None:
         slave = modbus_config.get('slave') or {}
         ctr = slave.get('ctr') or {}
@@ -684,6 +689,10 @@ class Hub:
         modbus_config = await self._async_web_job(self._webclient.get_modbus_config)
         if isinstance(modbus_config, dict):
             self._apply_web_modbus_config(modbus_config)
+
+        power_limits_config = await self._async_web_job(self._webclient.get_power_limits_config)
+        if isinstance(power_limits_config, dict):
+            self._apply_power_limit_config(power_limits_config)
 
         solar_api_config = await self._async_web_job(self._webclient.get_solar_api_config)
         if isinstance(solar_api_config, dict):

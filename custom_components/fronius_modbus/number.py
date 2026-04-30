@@ -156,6 +156,8 @@ class FroniusModbusNumber(FroniusModbusBaseEntity, NumberEntity):
             await self._hub.set_api_battery_power(value)
         elif self._key == 'soc_maximum':
             await self._hub.set_api_soc_values(soc_max=int(round(value)))
+        elif self._key == 'api_watt_peak_reference':
+            await self._hub.set_api_soc_values(soc_max=int(round(value)))
 
         self.async_write_ha_state()
 

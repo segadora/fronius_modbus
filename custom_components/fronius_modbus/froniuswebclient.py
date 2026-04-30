@@ -440,6 +440,9 @@ class FroniusWebClient:
     def get_modbus_config(self) -> dict[str, Any]:
         return self._get_json("/api/config/modbus")
 
+    def get_power_limits_config(self) -> dict[str, Any]:
+        return self._get_json("/api/config/powerLimits")
+
     def get_solar_api_config(self) -> dict[str, Any]:
         return self._get_json("/api/config/solar_api")
 
