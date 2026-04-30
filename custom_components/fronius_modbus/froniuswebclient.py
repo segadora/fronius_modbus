@@ -388,13 +388,6 @@ class FroniusWebClient:
 
     def _request(self, method: str, path: str, payload: dict | None = None) -> requests.Response:
 
-        _LOGGER.debug(
-            "Fronius Web API request: method=%s url=%s payload=%s",
-            method,
-            f"http://{self._host}{path}",
-            payload,
-        )
-
         response = requests.request(
             method,
             f"http://{self._host}{path}",
@@ -403,7 +396,7 @@ class FroniusWebClient:
             timeout=self._timeout,
         )
 
-        _LOGGER.debug(
+        _LOGGER.error(
             "Fronius Web API response: status=%s headers=%s body=%s",
             response.status_code,
             response.headers,
