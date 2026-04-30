@@ -3,7 +3,7 @@ import logging
 from .const import (
     STORAGE_API_NUMBER_TYPES,
     STORAGE_MODBUS_NUMBER_TYPES,
-    INVERTER_NUMBER_TYPES,
+    INVERTER_NUMBER_TYPES, INVERTER_API_NUMBER_TYPES,
 )
 
 from homeassistant.components.number import (
@@ -47,10 +47,15 @@ async def async_setup_entry(hass, config_entry, async_add_entities) -> None:
             entities.append(number)
 
         if hub.web_api_configured:
-            for number_info in STORAGE_API_NUMBER_TYPES:
+            configs = (
+                (STORAGE_API_NUMBER_TYPES, hub.device_info_storage),
+                (INVERTER_API_NUMBER_TYPES, hub.device_info_inverter),
+            )
+
+            for number_info, device_info in configs:
                 number = FroniusModbusNumber(
                     coordinator=coordinator,
-                    device_info=hub.device_info_storage,
+                    device_info=device_info,
                     name=number_info[0],
                     key=number_info[1],
                     translation_key=number_info[0],
