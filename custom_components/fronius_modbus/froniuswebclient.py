@@ -387,6 +387,14 @@ class FroniusWebClient:
         )
 
     def _request(self, method: str, path: str, payload: dict | None = None) -> requests.Response:
+
+        _LOGGER.debug(
+            "Fronius Web API request: method=%s url=%s payload=%s",
+            method,
+            f"http://{self._host}{path}",
+            payload,
+        )
+
         response = requests.request(
             method,
             f"http://{self._host}{path}",
@@ -394,6 +402,14 @@ class FroniusWebClient:
             json=payload,
             timeout=self._timeout,
         )
+
+        _LOGGER.debug(
+            "Fronius Web API response: status=%s headers=%s body=%s",
+            response.status_code,
+            response.headers,
+            response.text,
+        )
+
         if response.status_code in (401, 403):
             raise FroniusWebAuthError(f"Fronius Web API auth failed with status {response.status_code}")
         response.raise_for_status()
